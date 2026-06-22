@@ -5,7 +5,7 @@
 //  Tant que c'est vide, l'app tourne en MODE DÉMO (local).
 // ============================================================
 window.APP_CONFIG = {
-  SUPABASE_URL: "https://ovxalcnumxxelxprdmjg.supabase.co/rest/v1/",
+  SUPABASE_URL: "https://ovxalcnumxxelxprdmjg.supabase.co",
   SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im92eGFsY251bXh4ZWx4cHJkbWpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1MzAxODMsImV4cCI6MjA5NzEwNjE4M30.F8oRmjbV4FkdMbYTKwloD0bWaT1eh0hQGsO1dFHvus8",
 
   // Abonnement
