@@ -121,11 +121,15 @@ const Auth = {
       this.onSignedIn({ email, user_metadata: { name: u.name } });
     }
   },
-  frError(m) {
+  frError(m, err) {
+    m = (m == null ? '' : String(m));
+    if ((m === '' || m === '{}' || m === '[object Object]') && err && err.status) m = 'status ' + err.status;
     if (/already registered/i.test(m)) return 'Un compte existe déjà avec cet e-mail.';
     if (/Invalid login/i.test(m)) return 'E-mail ou mot de passe incorrect.';
     if (/Email not confirmed/i.test(m)) return 'Confirme ton adresse e-mail avant de te connecter.';
-    return m;
+    if (/rate limit|429|too many/i.test(m)) return 'Trop de demandes en peu de temps. Patiente quelques minutes puis réessaie.';
+    if (/sending|smtp|recovery email|status 5|unexpected/i.test(m)) return "L'e-mail n'a pas pu être envoyé. Avec le domaine de test Resend, seul l'e-mail du compte Resend peut recevoir ; vérifie ton domaine pour écrire à tous.";
+    return m || "Une erreur s'est produite. Réessaie dans un instant.";
   },
   async onSignedIn(user) {
     State.user = user;
@@ -141,7 +145,7 @@ const Auth = {
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return this.err('Saisis ton adresse e-mail ci-dessus, puis clique sur « Mot de passe oublié ».');
     if (SUPA_ON && supa) {
       const { error } = await supa.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
-      if (error) return this.err(this.frError(error.message));
+      if (error) return this.err(this.frError(error.message, error));
       this.err(''); toast('E-mail de réinitialisation envoyé. Vérifie ta boîte mail.');
     } else {
       this.err('La réinitialisation par e-mail nécessite les comptes serveur (Supabase). En mode démo, recrée simplement un compte.');
