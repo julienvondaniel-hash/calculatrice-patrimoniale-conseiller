@@ -1,4 +1,4 @@
-const CACHE = 'monkappro-v9';
+const CACHE = 'monkappro-v10';
 const ASSETS = ['./', './index.html', './app.js', './simulateurs.js', './config.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 // Recrée une réponse "propre" (sans redirection) — corrige l'erreur Safari
