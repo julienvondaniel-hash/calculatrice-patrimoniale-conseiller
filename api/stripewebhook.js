@@ -1,24 +1,18 @@
 // Webhook Stripe -> Supabase, hébergé sur Vercel (zéro dépendance).
 // Variables d'environnement à définir dans Vercel (Settings -> Environment Variables) :
-//   STRIPE_WEBHOOK_SECRET   = whsec_...        (secret de signature du webhook Stripe)
-//   STRIPE_SECRET_KEY       = sk_test_... ou sk_live_...
-//   SUPABASE_URL            = https://ovxalcnumxxelxprdmjg.supabase.co
-//   SUPABASE_SERVICE_KEY    = sb_secret_...     (clé "Secret" Supabase — JAMAIS côté navigateur)
-//   STRIPE_PRICE_ALL        = price_...         (id du prix de l'offre 9,99 €)
-//
-// Stripe -> Webhooks -> endpoint = https://<ton-app>.vercel.app/api/stripe-webhook
-// Évènements : checkout.session.completed, customer.subscription.updated,
-//              customer.subscription.deleted, invoice.paid
+//   STRIPE_WEBHOOK_SECRET   = whsec_...
+//   STRIPE_SECRET_KEY       = sk_live_... (ou sk_test_...)
+//   SUPABASE_URL            = https://ovxalcnumxxelxprdmjg.supabase.co   (SANS /rest/v1, sans slash final)
+//   SUPABASE_SERVICE_KEY    = sb_secret_...   (clé "Secret" Supabase — JAMAIS côté navigateur)
+//   STRIPE_PRICE_ALL        = price_...        (id du prix de l'offre 9,99 €)
 
 const crypto = require('crypto');
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') { res.status(405).send('Method not allowed'); return; }
 
-  // 1) Lire le corps BRUT (indispensable pour vérifier la signature Stripe)
   const raw = await readRawBody(req);
 
-  // 2) Vérifier la signature Stripe
   const sig = req.headers['stripe-signature'] || '';
   if (!verifyStripeSignature(raw, sig, process.env.STRIPE_WEBHOOK_SECRET)) {
     res.status(400).send('Bad signature'); return;
@@ -28,7 +22,6 @@ module.exports = async (req, res) => {
   try { evt = JSON.parse(raw.toString('utf8')); }
   catch (e) { res.status(400).send('Bad JSON'); return; }
 
-  // 3) Traiter l'évènement
   try {
     await handleEvent(evt);
   } catch (e) {
@@ -73,8 +66,10 @@ async function stripeGet(path) {
   return r.json();
 }
 
+// Renvoie le NOMBRE de lignes mises à jour (grâce à return=representation)
 async function supaUpdate(filter, fields) {
-  const url = process.env.SUPABASE_URL + '/rest/v1/profiles?' + filter;
+  const base = (process.env.SUPABASE_URL || '').replace(/\/+$/, '').replace(/\/rest\/v1$/, '');
+  const url = base + '/rest/v1/profiles?' + filter;
   const key = process.env.SUPABASE_SERVICE_KEY;
   const r = await fetch(url, {
     method: 'PATCH',
@@ -82,11 +77,15 @@ async function supaUpdate(filter, fields) {
       apikey: key,
       Authorization: 'Bearer ' + key,
       'Content-Type': 'application/json',
-      Prefer: 'return=minimal'
+      Prefer: 'return=representation'
     },
     body: JSON.stringify(fields)
   });
-  if (!r.ok) throw new Error('Supabase update -> ' + r.status + ' ' + (await r.text()));
+  const text = await r.text();
+  if (!r.ok) throw new Error('Supabase update -> ' + r.status + ' ' + text);
+  let rows = [];
+  try { rows = JSON.parse(text); } catch (_) {}
+  return Array.isArray(rows) ? rows.length : 0;
 }
 
 function planFromPrice(priceId) {
@@ -103,11 +102,21 @@ async function handleEvent(evt) {
       subscription_status: 'active', plan,
       current_period_end: end, stripe_customer_id: s.customer
     };
+    const email = (s.customer_details && s.customer_details.email)
+      ? s.customer_details.email.toLowerCase()
+      : (s.customer_email ? s.customer_email.toLowerCase() : null);
+
+    let n = 0;
+    const tried = [];
     if (s.client_reference_id) {
-      await supaUpdate('id=eq.' + encodeURIComponent(s.client_reference_id), fields);
-    } else if (s.customer_details && s.customer_details.email) {
-      await supaUpdate('email=eq.' + encodeURIComponent(s.customer_details.email.toLowerCase()), fields);
+      tried.push('id=' + s.client_reference_id);
+      n = await supaUpdate('id=eq.' + encodeURIComponent(s.client_reference_id), fields);
     }
+    if (n === 0 && email) {
+      tried.push('email=' + email);
+      n += await supaUpdate('email=eq.' + encodeURIComponent(email), fields);
+    }
+    if (n === 0) throw new Error('No profile matched (' + (tried.join('  ') || 'aucun identifiant dans la session') + ')');
   } else if (evt.type === 'customer.subscription.updated' || evt.type === 'invoice.paid') {
     const sub = (evt.type === 'invoice.paid')
       ? await stripeGet('subscriptions/' + evt.data.object.subscription)
