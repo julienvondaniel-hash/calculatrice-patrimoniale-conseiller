@@ -712,8 +712,8 @@ Object.assign(Calc, {
   demembrement({ type, dureeFixe, ageUsufruitier }) {
     let usufruit;
     if (type === 'fixe') {
-      // observé dans l'app : 0 an -> 23%, 10 ans -> 46% : (floor(durée/10)+1) × 23%, plafonné à 92%
-      const periodes = Math.floor(dureeFixe / 10) + 1;
+      // art. 669 II : 23% par période de 10 ans ENTAMÉE. 10 ans -> 23%, 11 ans -> 46%, 20 ans -> 46%.
+      const periodes = Math.max(1, Math.ceil(dureeFixe / 10));
       usufruit = Math.min(periodes * 23, 92);
     } else {
       // viager (art. 669 I) selon l'âge
@@ -871,9 +871,9 @@ function abattementDMTG(lien, type) {
   }
 }
 function baremeDMTG(taxable, lien) {
-  if (taxable <= 0) return 0;
-  if (lien === 'conjoint') return 0; // succession exonérée ; donation entre époux suit le barème ligne directe
-  if (lien === 'enfant' || lien === 'petitenfant') {
+  if (taxable <= 0) return 0; // succession entre époux : abattement infini -> taxable nul -> 0
+  // conjoint : succession exonérée (taxable déjà nul) ; donation au barème ligne directe au-delà de 80 724 €
+  if (lien === 'enfant' || lien === 'petitenfant' || lien === 'conjoint') {
     return baremeProgressif(taxable, [[8072,.05],[12109,.10],[15932,.15],[552324,.20],[902838,.30],[1805677,.40],[Infinity,.45]]);
   }
   if (lien === 'frere') return baremeProgressif(taxable, [[24430,.35],[Infinity,.45]]);
