@@ -492,31 +492,48 @@ function impotParPart(quotient, annee) {
 Object.assign(Calc, {
 
   /* ---- Impôt sur le revenu (barème progressif + décote) ---- */
-  impotRevenu({ annee, revenuImposable, parts }) {
+  impotRevenu({ annee, revenuImposable, parts, couple }) {
+    const isCouple = (couple != null) ? !!couple : (parts >= 2);
+    const base = isCouple ? 2 : 1;                 // parts "de base" (sans personnes à charge)
     const quotient = revenuImposable / parts;
-    const impotBrut = impotParPart(quotient, annee) * parts;
-    // Décote 2025 (revenus 2024) : 889 € − 45,25% impôt (seul), 1470 € − 45,25% (couple)
-    const seuilSeul = 1929, seuilCouple = 3191; // plafonds d'application
-    const isCouple = parts >= 2;
+
+    // Impôt au barème avec le nombre de parts réel
+    let impotBrut = impotParPart(quotient, annee) * parts;
+
+    // --- Plafonnement du quotient familial (demi-parts supplémentaires) ---
+    const plafondDP = (annee === 2024) ? 1791 : 1807; // plafond par demi-part supplémentaire
+    let plafond = 0, plafonne = false;
+    if (parts > base) {
+      const impotBase = impotParPart(revenuImposable / base, annee) * base; // impôt sans les parts d'enfants
+      const avantage = impotBase - impotBrut;                                // réduction due aux parts en plus
+      const demiParts = Math.round((parts - base) / 0.5);                    // nb de demi-parts supplémentaires
+      plafond = demiParts * plafondDP;
+      if (avantage > plafond) { impotBrut = impotBase - plafond; plafonne = true; }
+    }
+
+    // --- Décote ---
+    const dec = (annee === 2024)
+      ? { s: 889, c: 1470, seuilS: 1929, seuilC: 3191 }
+      : { s: 897, c: 1483, seuilS: 1946, seuilC: 3220 };
     let decote = 0;
-    if (isCouple && impotBrut < seuilCouple) decote = Math.max(0, 1470 - impotBrut * 0.4525);
-    else if (!isCouple && impotBrut < seuilSeul) decote = Math.max(0, 889 - impotBrut * 0.4525);
+    if (isCouple && impotBrut < dec.seuilC) decote = Math.max(0, dec.c - impotBrut * 0.4525);
+    else if (!isCouple && impotBrut < dec.seuilS) decote = Math.max(0, dec.s - impotBrut * 0.4525);
+
     const impotNet = Math.max(0, impotBrut - decote);
     const tauxMoyen = revenuImposable > 0 ? impotNet / revenuImposable * 100 : 0;
-    // TMI
-    const tr = BAREME_IR[annee] || BAREME_IR[2025];
-    let tmi = 0; for (const [plafond, taux] of tr) { if (quotient > (tr[tr.indexOf([plafond,taux])-1]?.[0]||0)) tmi = taux; if (quotient <= plafond) { tmi = taux; break; } }
     return {
       rows: [
         ['Revenu net imposable', eur(revenuImposable)],
+        ['Situation', isCouple ? 'Couple (imposition commune)' : 'Personne seule'],
         ['Nombre de parts', String(parts)],
         ['Quotient familial', eur(quotient)],
+        plafonne ? ['Plafonnement avantage QF', 'limité à ' + eur(plafond)] : null,
         ['Impôt brut', eur(impotBrut)],
         decote > 0 ? ['Décote', '– ' + eur(decote)] : null,
         ['Taux moyen', pct(tauxMoyen)],
       ].filter(Boolean),
       total: ['Impôt net sur le revenu', eur(impotNet)],
-      note: `Barème progressif ${annee}. Décote appliquée si éligible. Hors réductions/crédits d'impôt et plafonnement du quotient familial.`
+      note: `Barème progressif ${annee}. Plafonnement du quotient familial (${plafondDP} €/demi-part) et décote appliqués. Hors cas particuliers (parent isolé case T, invalidité, ancien combattant) et réductions/crédits d'impôt.`
     };
   },
 
@@ -1308,7 +1325,7 @@ const Screens = {
     sheet.append(field('Nombre de parts du foyer fiscal', stepperDecimal('c-parts', 1, 1, 20, 0.5)));
     sheet.append(actions(() => {
       const annee = $('#c-annee').value === '2024' ? 2024 : 2025;
-      renderResult(sheet, Calc.impotRevenu({ annee, revenuImposable: num($('#c-rev').value), parts: parseFloat($('#c-parts').value) || 1 }));
+      renderResult(sheet, Calc.impotRevenu({ annee, revenuImposable: num($('#c-rev').value), parts: parseFloat($('#c-parts').value) || 1, couple: $('#c-sit').value === 'couple' }));
     }));
     v.append(sheet); return v;
   },
