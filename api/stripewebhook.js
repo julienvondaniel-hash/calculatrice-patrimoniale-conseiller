@@ -82,7 +82,11 @@ async function supaUpdate(filter, fields) {
     body: JSON.stringify(fields)
   });
   const text = await r.text();
-  if (!r.ok) throw new Error('Supabase update -> ' + r.status + ' ' + text);
+  if (!r.ok) {
+    const k = process.env.SUPABASE_SERVICE_KEY || '';
+    const info = 'keyStart=' + k.slice(0, 12) + ' keyLen=' + k.length + ' urlBase=' + base;
+    throw new Error('Supabase update -> ' + r.status + ' ' + text + ' [' + info + ']');
+  }
   let rows = [];
   try { rows = JSON.parse(text); } catch (_) {}
   return Array.isArray(rows) ? rows.length : 0;
