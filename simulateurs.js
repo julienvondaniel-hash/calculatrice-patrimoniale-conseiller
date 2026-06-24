@@ -379,7 +379,7 @@
         for (let m = 1; m <= horizon * 12; m++) {
           const y = Math.ceil(m / 12), loanPay = m <= creditM ? pmtM : 0;
           if (m <= creditM) bal -= (pmtM - bal * rM);
-          const chargesM = P * chargesPct * Math.pow(1 + reval * 0 + 0.015, 0) * Math.pow(1.015, y - 1) / 12; // charges ~inflation 1,5%
+          const chargesM = P * chargesPct * Math.pow(1.015, y - 1) / 12; // charges indexées ~inflation 1,5%/an
           const rentM = P * loyerPct * Math.pow(1 + irl, y - 1) / 12;
           const diff = (loanPay + chargesM) - rentM;
           renter = renter * (1 + rPM) + diff; renterC += diff;
@@ -425,7 +425,7 @@
         simRender(sheet, {
           title: 'Résultats',
           rows: [
-            ['Valeur taxable' + (coefNP < 1 ? ' (nue-propriété ' + Math.round(coefNP * 100) + ' %)' : ''), e0(valeur * coefNP)],
+            ['Valeur transmise' + (coefNP < 1 ? ' (nue-propriété ' + Math.round(coefNP * 100) + ' %)' : ''), e0(valeur * coefNP)],
             ['Exonération Dutreil (75 %)', '– ' + e0(valeur * coefNP * 0.75)],
             ['Droits avec Dutreil' + (reduc50 ? ' (− réduction 50 %)' : ''), e0(droitsD)],
             ['Droits sans Dutreil', e0(droitsS)],
@@ -561,26 +561,68 @@
     const loyerY = y => loyerBase * Math.pow(1 + P.irl, y - 1);
     const chExplY = y => { const lo = loyerY(y); return P.tf * Math.pow(1.01, y - 1) + P.pno * Math.pow(1.01, y - 1) + lo * (P.gest + P.trav) + assurEmp; };
     const amImmo = P.prix * 0.8 / P.amDuree, isSeuil = 42500, isReduit = 0.15, isTaux = 0.25;
-    let stock = 0, cumAm = 0, deficitRep = 0;
+    const isOn = x => x <= 0 ? 0 : Math.min(x, isSeuil) * isReduit + Math.max(x - isSeuil, 0) * isTaux;
+    let stock = 0, cumAm = 0, cumAmLoc = 0, amStock = 0, deficitRep = 0;
     const apport = Math.max(P.prix - P.emp, 0);
     const cf = [-apport]; let somE = 0, saleNet = 0, gainBrut = 0, pvTax = 0;
     for (let y = 1; y <= holdY; y++) {
       const annY = y <= P.dc ? annuite : 0, loyer = loyerY(y), chExpl = chExplY(y), interets = yint(y);
-      const resFonc = loyer - chExpl - interets; let impot = 0;
+      const resFonc = loyer - chExpl - interets; let impot = 0, sciBase = 0;
       if (regime === 'rf') impot = -resFonc * (P.tmi + P.ps);
       else if (regime === 'malraux') impot = -resFonc * (P.tmi + P.ps) + (y <= 3 ? P.prix * 0.5 * 0.30 / 3 : 0);
       else if (regime === 'deficit') {
-        const trav = y <= 3 ? P.prix * 0.15 / 3 : 0; let res = resFonc - trav;
-        if (res < 0) { let d = -res; const surRG = Math.min(d, 10700); impot = surRG * P.tmi; deficitRep += d - surRG; }
-        else { const ep = Math.min(deficitRep, res); deficitRep -= ep; impot = -(res - ep) * (P.tmi + P.ps); }
+        // intérêts d'emprunt imputables UNIQUEMENT sur les revenus fonciers ;
+        // déficit "autres charges" imputable sur le revenu global, plafonné à 10 700 €.
+        const trav = y <= 3 ? P.prix * 0.15 / 3 : 0;
+        const chargesHorsInt = chExpl + trav;
+        const res = loyer - interets - chargesHorsInt;
+        if (res >= 0) { const ep = Math.min(deficitRep, res); deficitRep -= ep; impot = -(res - ep) * (P.tmi + P.ps); }
+        else {
+          const deficitInteret = Math.max(0, interets - loyer);             // intérêts non couverts -> report foncier seul
+          const revenuApresInt = Math.max(0, loyer - interets);
+          const deficitAutres = Math.max(0, chargesHorsInt - revenuApresInt); // autres charges -> revenu global
+          const imputRG = Math.min(deficitAutres, 10700);
+          impot = imputRG * P.tmi;                                          // économie d'impôt (revenu global, sans PS)
+          deficitRep += (deficitAutres - imputRG) + deficitInteret;
+        }
       } else if (regime === 'mh') { const trav = y <= 3 ? P.prix * 0.15 / 3 : 0; impot = -(resFonc - trav) * P.tmi; }
-      else if (regime === 'lmnp' || regime === 'lmp') { const rb = loyer - chExpl - interets - (amImmo + P.prix * 0.05 / 10); if (rb < 0) { stock += -rb; impot = 0; } else { const ep = Math.min(stock, rb); stock -= ep; impot = -(rb - ep) * (P.tmi + P.ps); } }
-      else if (regime === 'sci_is') { cumAm += amImmo; let r2 = loyer - chExpl - interets - amImmo; if (r2 < 0) { stock += -r2; impot = 0; } else { const ep = Math.min(stock, r2); stock -= ep; r2 -= ep; impot = -(Math.min(r2, isSeuil) * isReduit + Math.max(r2 - isSeuil, 0) * isTaux); } }
+      else if (regime === 'lmnp' || regime === 'lmp') {
+        // BIC : l'amortissement ne peut pas créer de déficit (excédent reporté en amortissements différés)
+        const am = amImmo + P.prix * 0.05 / 10;
+        const rAvAm = loyer - chExpl - interets;        // résultat avant amortissement
+        if (rAvAm < 0) { stock += -rAvAm; impot = 0; }   // déficit BIC (hors amort) reportable
+        else {
+          let base = rAvAm;
+          const epD = Math.min(stock, base); stock -= epD; base -= epD;     // imputation déficits BIC antérieurs
+          const amDispo = am + amStock, amUtil = Math.min(amDispo, base);    // amort. limité au résultat
+          amStock = amDispo - amUtil; cumAmLoc += amUtil;                    // excédent reporté ; cumul réellement déduit
+          impot = -(base - amUtil) * (P.tmi + P.ps);
+        }
+      }
+      else if (regime === 'sci_is') {
+        cumAm += amImmo; let r2 = loyer - chExpl - interets - amImmo;
+        if (r2 < 0) { stock += -r2; impot = 0; }
+        else { const ep = Math.min(stock, r2); stock -= ep; r2 -= ep; sciBase = r2; impot = -isOn(r2); }
+      }
       let net = (loyer - chExpl - annY) + impot; somE += -net;
       if (y === holdY) {
         const sv = P.prix * Math.pow(1 + P.reval, holdY);
-        if (regime === 'sci_is') { const vnc = Math.max(P.prix - cumAm, 0); gainBrut = Math.max(sv - vnc, 0); pvTax = Math.min(gainBrut, isSeuil) * isReduit + Math.max(gainBrut - isSeuil, 0) * isTaux; }
-        else { gainBrut = Math.max(sv - P.prix, 0); pvTax = gainBrut > 0 ? gainBrut * (1 - abIR(holdY)) * 0.19 + gainBrut * (1 - abPS(holdY)) * 0.172 : 0; }
+        if (regime === 'sci_is') {
+          const vnc = Math.max(P.prix - cumAm, 0); gainBrut = Math.max(sv - vnc, 0);
+          pvTax = isOn(sciBase + gainBrut) - isOn(sciBase);                  // PV imposée en partageant le seuil 15% de l'année
+        } else if (regime === 'lmp') {
+          // plus-value professionnelle : court terme (amortissements déduits) au barème ; long terme (appréciation) au PFU 30%
+          const pvCT = cumAmLoc, pvLT = Math.max(sv - P.prix, 0);
+          gainBrut = pvCT + pvLT;
+          pvTax = pvCT * (P.tmi + P.ps) + pvLT * 0.30;
+        } else if (regime === 'lmnp') {
+          // LF 2025 : réintégration des amortissements déduits dans la plus-value des particuliers
+          gainBrut = Math.max(sv - P.prix + cumAmLoc, 0);
+          pvTax = gainBrut > 0 ? gainBrut * (1 - abIR(holdY)) * 0.19 + gainBrut * (1 - abPS(holdY)) * 0.172 : 0;
+        } else {
+          gainBrut = Math.max(sv - P.prix, 0);
+          pvTax = gainBrut > 0 ? gainBrut * (1 - abIR(holdY)) * 0.19 + gainBrut * (1 - abPS(holdY)) * 0.172 : 0;
+        }
         saleNet = sv - crd(holdY) - pvTax; net += saleNet;
       }
       cf.push(net);
