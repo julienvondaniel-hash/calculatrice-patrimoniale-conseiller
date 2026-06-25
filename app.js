@@ -969,6 +969,7 @@ function actions(onCalc) {
 }
 function renderResult(sheet, res) {
   $$('.result', sheet).forEach(r => r.remove());
+  $$('.sim-export', sheet).forEach(r => r.remove());
   const box = el('div', { class: 'result' });
   if (res.info) { box.append(el('div', { class: 'note', html: res.info, style: 'font-size:14px;color:#dfe1ee' })); sheet.append(box); safeScroll(box); return; }
   box.append(el('h3', {}, 'Résultat'));
@@ -977,6 +978,7 @@ function renderResult(sheet, res) {
   if (res.net) box.append(el('div', { class: 'row total' }, [el('span', { class: 'k' }, res.net[0]), el('span', { class: 'v', style:'color:#fff' }, res.net[1])]));
   if (res.note) box.append(el('div', { class: 'note' }, res.note));
   sheet.append(box);
+  try { if (window.MKPExport && res.rows && res.rows.length) window.MKPExport.addExportButtons(sheet, res); } catch (e) {}
   safeScroll(box);
 }
 function safeScroll(node) { try { if (node.scrollIntoView) node.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {} }
