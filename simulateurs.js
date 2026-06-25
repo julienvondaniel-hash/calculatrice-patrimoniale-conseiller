@@ -192,7 +192,7 @@
   window.MKPExport = { addExportButtons, collectHypotheses, Export };
 
   // Construit les 2 tableaux annuels (fiscal + trésorerie) d'un scénario immobilier
-  function immoExportTables(R, label) {
+  function immoExportTables(R, label, opts) {
     const eN = n => e0(Math.round(n));
     const neg = n => Math.round(n) === 0 ? eN(0) : '− ' + eN(Math.abs(n));
     const pre = label ? label + ' — ' : '';
@@ -215,7 +215,13 @@
         ['Flux net an ' + N + ' (avec revente — base du TRI)', '', '', '', '', '', eN(lastOp + R.saleNet)]
       ])
     };
-    return [fisc, cash];
+    const amort = {
+      kind: 'amort',
+      title: 'Tableau d\'amortissement de l\'emprunt',
+      head: ['An', 'Capital début', 'Annuité', 'Intérêts', 'Capital remb.', 'Capital restant dû'],
+      rows: (R.amortRows || []).map(d => [String(d[0]), eN(d[1]), eN(d[2]), eN(d[3]), eN(d[4]), eN(d[5])])
+    };
+    return (opts && opts.noAmort) ? [fisc, cash] : [fisc, cash, amort];
   }
 
   /* ---------- moteurs partagés (validés au centime) ---------- */
@@ -465,18 +471,38 @@
         const F = P * notaire, loan = Math.max(0, P + F - apport), creditM = duree * 12, rM = taux / 12;
         const pmtM = rM === 0 ? loan / creditM : loan * rM / (1 - Math.pow(1 + rM, -creditM)), rPM = rdtP / 12;
         let bal = loan, renter = apport, renterC = apport; const bW = [P - loan], rW = [apport]; let cross = null;
+        const detail = []; let payY = 0, chY = 0, rentY = 0;
         for (let m = 1; m <= horizon * 12; m++) {
           const y = Math.ceil(m / 12), loanPay = m <= creditM ? pmtM : 0;
           if (m <= creditM) bal -= (pmtM - bal * rM);
           const chargesM = P * chargesPct * Math.pow(1.015, y - 1) / 12; // charges indexées ~inflation 1,5%/an
           const rentM = P * loyerPct * Math.pow(1 + irl, y - 1) / 12;
+          payY += loanPay; chY += chargesM; rentY += rentM;
           const diff = (loanPay + chargesM) - rentM;
           renter = renter * (1 + rPM) + diff; renterC += diff;
-          if (m % 12 === 0) { const pv = P * Math.pow(1 + reval, y); const rn = renter - Math.max(renter - renterC, 0) * flat; const bn = pv - Math.max(bal, 0); bW.push(bn); rW.push(rn); if (cross === null && bn >= rn) cross = y; }
+          if (m % 12 === 0) {
+            const pv = P * Math.pow(1 + reval, y); const rn = renter - Math.max(renter - renterC, 0) * flat; const bn = pv - Math.max(bal, 0);
+            bW.push(bn); rW.push(rn); if (cross === null && bn >= rn) cross = y;
+            detail.push([y, pv, Math.max(bal, 0), bn, payY, chY, rentY, renter, rn, bn - rn]);
+            payY = 0; chY = 0; rentY = 0;
+          }
         }
         const buyerH = bW[horizon], renterH = rW[horizon], ecart = buyerH - renterH;
+        const eN = n => e0(Math.round(n)), neg = n => Math.round(n) === 0 ? eN(0) : '− ' + eN(Math.abs(n)), sgn = n => Math.round(n) === 0 ? eN(0) : (n > 0 ? '+ ' + eN(n) : neg(n));
+        const achatTables = [
+          { kind: 'fisc', title: 'Patrimoine net — acheteur vs locataire',
+            head: ['An', 'Valeur bien', '− CRD', 'Patrim. acheteur', 'Placement loc.', 'Patrim. locataire', 'Écart'],
+            rows: detail.map(d => [String(d[0]), eN(d[1]), neg(d[2]), eN(d[3]), eN(d[7]), eN(d[8]), sgn(d[9])]) },
+          { kind: 'cash', title: 'Cash-flow annuel — décaissements (acheteur) et placement (locataire)',
+            head: ['An', 'Mensualités (−)', 'Charges (−)', 'Loyer locataire (−)', 'Différence placée'],
+            rows: detail.map(d => [String(d[0]), neg(d[4]), neg(d[5]), neg(d[6]), sgn(d[4] + d[5] - d[6])]) }
+        ];
+        { let b = loan, cdeb = loan; const ar = [];
+          for (let y = 1; y <= duree; y++) { let itY = 0; for (let mm = 1; mm <= 12; mm++) { const i = b * rM; b -= (pmtM - i); itY += i; } const cfin = Math.max(b, 0); ar.push([String(y), eN(cdeb), eN((cdeb - cfin) + itY), eN(itY), eN(cdeb - cfin), eN(cfin)]); cdeb = cfin; }
+          achatTables.push({ kind: 'amort', title: 'Tableau d\'amortissement de l\'emprunt', head: ['An', 'Capital début', 'Annuité', 'Intérêts', 'Capital remb.', 'Capital restant dû'], rows: ar }); }
         simRender(sheet, {
           title: 'Résultats',
+          exportTables: achatTables,
           charts: [{ title: 'Évolution du patrimoine net', draw: cv => lineChart(cv, { n: horizon + 1, x0: 0, marker: cross, zero: true, euro: true, series: [{ data: bW, color: '#262A41' }, { data: rW, color: '#C9A24B' }] }), legend: '— acheteur · — locataire · - - bascule' }],
           rows: [
             ['Patrimoine acheteur (à ' + horizon + ' ans)', e0(buyerH)],
@@ -624,7 +650,7 @@
         const better = IS.gainNet >= IR.gainNet ? 'IS' : 'IR';
         simRender(sheet, {
           title: 'Comparaison (IR / IS)',
-          exportTables: immoExportTables(IR, 'SCI à l\'IR').concat(immoExportTables(IS, 'SCI à l\'IS')),
+          exportTables: immoExportTables(IR, 'SCI à l\'IR').concat(immoExportTables(IS, 'SCI à l\'IS', { noAmort: true })),
           charts: [{ title: 'TRI selon l\'année de cession', draw: cv => lineChart(cv, { n: maxY + 1, x0: 1, marker: P.hold, zero: false, euro: false, series: [{ data: [0].concat(tIR), color: '#262A41' }, { data: [0].concat(tIS), color: '#C9A24B' }] }), legend: '— SCI à l\'IR · — SCI à l\'IS · - - détention retenue' }],
           rows: [
             ['TRI (IR / IS)', (IR.tri === null ? 'n/a' : p2(IR.tri * 100)) + '  /  ' + (IS.tri === null ? 'n/a' : p2(IS.tri * 100))],
@@ -723,7 +749,8 @@
       }
       cf.push(net);
     }
-    return { tri: irr(cf), effort: somE / holdY / 12, saleNet, gainBrut, pvTax, gainNet: cf.reduce((a, c) => a + c, 0), sv: svFinal, crd: crdFinal, fiscalRows, cashRows };
+    const amortRows = []; { let cdeb = P.emp; for (let y = 1; y <= P.dc; y++) { const it = yint(y), cfin = crd(y), cr = cdeb - cfin; amortRows.push([y, cdeb, cr + it, it, cr, cfin]); cdeb = cfin; } }
+    return { tri: irr(cf), effort: somE / holdY / 12, saleNet, gainBrut, pvTax, gainNet: cf.reduce((a, c) => a + c, 0), sv: svFinal, crd: crdFinal, fiscalRows, cashRows, amortRows };
   }
 
   /* -------- Écran : Profil conseiller -------- */
