@@ -81,7 +81,8 @@
 
   /* ---------- export PDF (impression) & Excel (.xls) ---------- */
   const Export = {
-    pdf(title, rows, total) {
+    pdf(title, rows, total, opts) {
+      opts = opts || {};
       const p = Profile.get();
       const contact = [
         p.cabinet ? '<b>' + esc(p.cabinet) + '</b>' : '',
@@ -91,26 +92,65 @@
         p.adresse ? esc(p.adresse) : ''
       ].filter(Boolean).join('<br>');
       const logo = p.logo ? '<img src="' + p.logo + '">' : brandSVGdark();
+      // Hypothèses sur 2 colonnes
+      let hypo = '';
+      if (opts.hypo && opts.hypo.length) {
+        let r = '';
+        for (let i = 0; i < opts.hypo.length; i += 2) {
+          const a = opts.hypo[i], b = opts.hypo[i + 1];
+          r += '<tr><td class="k">' + esc(a[0]) + '</td><td class="v">' + esc(a[1]) + '</td><td class="sep"></td>'
+            + (b ? '<td class="k">' + esc(b[0]) + '</td><td class="v">' + esc(b[1]) + '</td>' : '<td></td><td></td>') + '</tr>';
+        }
+        hypo = '<div class="pr-sec">Hypothèses saisies</div><table class="pr-2col"><tbody>' + r + '</tbody></table>';
+      }
+      // Tableaux annuels (fiscal / trésorerie)
+      let tables = '';
+      (opts.tables || []).forEach(t => {
+        const head = '<tr>' + t.head.map(x => '<th>' + esc(x) + '</th>').join('') + '</tr>';
+        const bd = t.rows.map(r => '<tr>' + r.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>').join('');
+        tables += '<div class="pr-sec">' + esc(t.title) + '</div><table class="pr-year ' + (t.kind || '') + '"><thead>' + head + '</thead><tbody>' + bd + '</tbody></table>';
+      });
       const body = rows.map(r => '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>').join('')
-        + (total ? '<tr class="tot"><td>' + esc(total[0]) + '</td><td>' + esc(total[1]) + '</td></tr>' : '');
+        + (total ? '<tr class="tot"><td>' + esc(total[0]) + '</td><td>' + esc(total[1]) + '</td></tr>' : '')
+        + (opts.net ? '<tr class="tot"><td>' + esc(opts.net[0]) + '</td><td>' + esc(opts.net[1]) + '</td></tr>' : '');
+      const method = opts.note ? '<div class="pr-method"><b>Méthode de calcul :</b> ' + esc(opts.note) + '</div>' : '';
       document.getElementById('print-root').innerHTML =
         '<div class="pr-head"><div class="pr-logo">' + logo + '</div><div class="pr-contact">' + contact + '</div></div>'
         + '<div class="pr-title">' + esc(title) + '</div>'
         + '<div class="pr-date">Édité le ' + new Date().toLocaleDateString('fr-FR') + '</div>'
-        + '<table class="pr-tbl"><tbody>' + body + '</tbody></table>'
+        + hypo
+        + tables
+        + '<div class="pr-sec">Synthèse du résultat</div><table class="pr-tbl"><tbody>' + body + '</tbody></table>'
+        + method
         + '<div class="pr-note">Simulation indicative établie à partir des hypothèses saisies — ne constitue pas un conseil en investissement ni un conseil fiscal personnalisé.</div>'
         + '<div class="pr-foot"><span>' + (p.cabinet ? esc(p.cabinet) : 'Mon Kap Pro') + '</span><span>Généré avec Mon Kap Pro</span></div>';
       setTimeout(() => window.print(), 60);
     },
-    excel(title, rows, total) {
+    excel(title, rows, total, opts) {
+      opts = opts || {};
       const p = Profile.get();
       let h = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body><table border="1">';
       [['Cabinet', p.cabinet], ['Conseiller', p.conseiller], ['Téléphone', p.tel], ['E-mail', p.email], ['Adresse', p.adresse]]
         .filter(r => r[1]).forEach(r => h += '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>');
       h += '<tr><td></td><td></td></tr><tr><td><b>' + esc(title) + '</b></td><td>' + new Date().toLocaleDateString('fr-FR') + '</td></tr>';
+      if (opts.hypo && opts.hypo.length) {
+        h += '<tr><td></td></tr><tr><td><b>Hypothèses saisies</b></td></tr>';
+        for (let i = 0; i < opts.hypo.length; i += 2) {
+          const a = opts.hypo[i], b = opts.hypo[i + 1];
+          h += '<tr><td>' + esc(a[0]) + '</td><td>' + esc(a[1]) + '</td><td></td>' + (b ? '<td>' + esc(b[0]) + '</td><td>' + esc(b[1]) + '</td>' : '') + '</tr>';
+        }
+      }
+      (opts.tables || []).forEach(t => {
+        h += '<tr><td></td></tr><tr><td><b>' + esc(t.title) + '</b></td></tr>';
+        h += '<tr>' + t.head.map(x => '<td><b>' + esc(x) + '</b></td>').join('') + '</tr>';
+        t.rows.forEach(r => h += '<tr>' + r.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>');
+      });
+      h += '<tr><td></td><td></td></tr><tr><td><b>Synthèse du résultat</b></td><td></td></tr>';
       h += '<tr><td><b>Indicateur</b></td><td><b>Valeur</b></td></tr>';
       rows.forEach(r => h += '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>');
       if (total) h += '<tr><td><b>' + esc(total[0]) + '</b></td><td><b>' + esc(total[1]) + '</b></td></tr>';
+      if (opts.net) h += '<tr><td><b>' + esc(opts.net[0]) + '</b></td><td><b>' + esc(opts.net[1]) + '</b></td></tr>';
+      if (opts.note) h += '<tr><td></td><td></td></tr><tr><td><b>Méthode de calcul</b></td><td>' + esc(opts.note) + '</td></tr>';
       h += '</table></body></html>';
       const blob = new Blob(['﻿' + h], { type: 'application/vnd.ms-excel' });
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
@@ -120,13 +160,62 @@
       toast('Fichier Excel téléchargé');
     }
   };
+  // Capture toutes les valeurs saisies dans le formulaire de l'écran courant (pour vérification)
+  function collectHypotheses() {
+    const out = [], view = document.getElementById('view');
+    if (!view) return out;
+    view.querySelectorAll('.sheet .card').forEach(card => {
+      const lab = card.querySelector('.field-label');
+      if (!lab) return;
+      const sel = card.querySelector('select'), inp = card.querySelector('input');
+      const act = card.querySelector('.toggle button.active, .seg button.active');
+      let val = '';
+      if (sel) val = (sel.options[sel.selectedIndex] || {}).text || sel.value;
+      else if (inp) { val = inp.value; const suf = card.querySelector('.suffix'); if (suf && val !== '') val += ' ' + suf.textContent.trim(); }
+      else if (act) val = act.textContent.trim();
+      else return;
+      const label = lab.textContent.replace(/\s+/g, ' ').trim();
+      if (label && val !== '' && val != null) out.push([label, val]);
+    });
+    return out;
+  }
   function addExportButtons(sheet, res) {
     const title = (($('#view .hero h1') || {}).textContent || 'Simulation') + ' — ' + (res.title || 'Résultat');
     const wrap = el('div', { class: 'sim-export', style: 'display:flex;gap:10px;margin-top:10px' });
     const mk = (txt, fn) => { const b = el('button', { class: 'btn-ghost', type: 'button', style: 'margin:0;flex:1;padding:16px' }, txt); b.onclick = () => { try { fn(); } catch (e) { toast('Erreur export'); } }; return b; };
-    wrap.append(mk('📄 PDF', () => Export.pdf(title, res.rows, res.total)));
-    wrap.append(mk('📊 Excel', () => Export.excel(title, res.rows, res.total)));
+    const opts = () => ({ hypo: collectHypotheses(), note: res.note, tables: res.exportTables, net: res.net });
+    wrap.append(mk('📄 PDF', () => Export.pdf(title, res.rows, res.total, opts())));
+    wrap.append(mk('📊 Excel', () => Export.excel(title, res.rows, res.total, opts())));
     sheet.append(wrap);
+  }
+  // Exposé pour que les calculatrices fiscales (app.js) puissent aussi exporter
+  window.MKPExport = { addExportButtons, collectHypotheses, Export };
+
+  // Construit les 2 tableaux annuels (fiscal + trésorerie) d'un scénario immobilier
+  function immoExportTables(R, label) {
+    const eN = n => e0(Math.round(n));
+    const neg = n => Math.round(n) === 0 ? eN(0) : '− ' + eN(Math.abs(n));
+    const pre = label ? label + ' — ' : '';
+    const N = R.fiscalRows.length;
+    const fisc = {
+      kind: 'fisc',
+      title: pre + 'Détail fiscal (Loyer − Charges − Intérêts − Amortissement = Résultat, puis Impôt)',
+      head: ['An', 'Loyer', '− Charges', '− Intérêts', '− Amort.', '= Résultat', 'Impôt'],
+      rows: R.fiscalRows.map(d => [String(d[0]), eN(d[1]), neg(d[2]), neg(d[3]), neg(d[4]), eN(d[5]), eN(d[6])])
+    };
+    const csum = i => R.cashRows.reduce((a, d) => a + d[i], 0);
+    const lastOp = R.cashRows.length ? R.cashRows[R.cashRows.length - 1][6] : 0;
+    const cash = {
+      kind: 'cash',
+      title: pre + 'Trésorerie — encaissements (+) / décaissements (−)',
+      head: ['An', 'Loyer (+)', 'Capital (−)', 'Intérêts (−)', 'Charges (−)', 'Impôt', 'Cash-flow'],
+      rows: R.cashRows.map(d => [String(d[0]), '+ ' + eN(d[1]), neg(d[2]), neg(d[3]), neg(d[4]), (Math.round(d[5]) === 0 ? eN(0) : (d[5] > 0 ? '+ ' + eN(d[5]) : neg(d[5]))), eN(d[6])]).concat([
+        ['Revente', '+ ' + eN(R.sv), '', '', neg(R.pvTax) + ' (PV)', R.crd > 0 ? neg(R.crd) + ' (CRD)' : '', '+ ' + eN(R.saleNet)],
+        ['Σ totaux', '+ ' + eN(csum(1)), neg(csum(2)), neg(csum(3)), neg(csum(4)), eN(csum(5)), eN(csum(6))],
+        ['Flux net an ' + N + ' (avec revente — base du TRI)', '', '', '', '', '', eN(lastOp + R.saleNet)]
+      ])
+    };
+    return [fisc, cash];
   }
 
   /* ---------- moteurs partagés (validés au centime) ---------- */
@@ -517,6 +606,7 @@
         const reg = gvSel(pfx + '-reg'), R = immoScenario(P, reg, P.hold);
         simRender(sheet, {
           title: 'Résultats',
+          exportTables: immoExportTables(R),
           rows: [
             ['TRI du projet', R.tri === null ? 'n/a' : p2(R.tri * 100)],
             ['Effort d\'épargne moyen', eMo(R.effort)],
@@ -534,6 +624,7 @@
         const better = IS.gainNet >= IR.gainNet ? 'IS' : 'IR';
         simRender(sheet, {
           title: 'Comparaison (IR / IS)',
+          exportTables: immoExportTables(IR, 'SCI à l\'IR').concat(immoExportTables(IS, 'SCI à l\'IS')),
           charts: [{ title: 'TRI selon l\'année de cession', draw: cv => lineChart(cv, { n: maxY + 1, x0: 1, marker: P.hold, zero: false, euro: false, series: [{ data: [0].concat(tIR), color: '#262A41' }, { data: [0].concat(tIS), color: '#C9A24B' }] }), legend: '— SCI à l\'IR · — SCI à l\'IS · - - détention retenue' }],
           rows: [
             ['TRI (IR / IS)', (IR.tri === null ? 'n/a' : p2(IR.tri * 100)) + '  /  ' + (IS.tri === null ? 'n/a' : p2(IS.tri * 100))],
@@ -565,16 +656,17 @@
     let stock = 0, cumAm = 0, cumAmLoc = 0, amStock = 0, deficitRep = 0;
     const apport = Math.max(P.prix - P.emp, 0);
     const cf = [-apport]; let somE = 0, saleNet = 0, gainBrut = 0, pvTax = 0;
+    const fiscalRows = [], cashRows = []; let svFinal = 0, crdFinal = 0;
     for (let y = 1; y <= holdY; y++) {
       const annY = y <= P.dc ? annuite : 0, loyer = loyerY(y), chExpl = chExplY(y), interets = yint(y);
-      const resFonc = loyer - chExpl - interets; let impot = 0, sciBase = 0;
+      const resFonc = loyer - chExpl - interets; let impot = 0, sciBase = 0, amortYear = 0, chargesDed = chExpl;
       if (regime === 'rf') impot = -resFonc * (P.tmi + P.ps);
       else if (regime === 'malraux') impot = -resFonc * (P.tmi + P.ps) + (y <= 3 ? P.prix * 0.5 * 0.30 / 3 : 0);
       else if (regime === 'deficit') {
         // intérêts d'emprunt imputables UNIQUEMENT sur les revenus fonciers ;
         // déficit "autres charges" imputable sur le revenu global, plafonné à 10 700 €.
         const trav = y <= 3 ? P.prix * 0.15 / 3 : 0;
-        const chargesHorsInt = chExpl + trav;
+        const chargesHorsInt = chExpl + trav; chargesDed = chargesHorsInt;
         const res = loyer - interets - chargesHorsInt;
         if (res >= 0) { const ep = Math.min(deficitRep, res); deficitRep -= ep; impot = -(res - ep) * (P.tmi + P.ps); }
         else {
@@ -585,10 +677,10 @@
           impot = imputRG * P.tmi;                                          // économie d'impôt (revenu global, sans PS)
           deficitRep += (deficitAutres - imputRG) + deficitInteret;
         }
-      } else if (regime === 'mh') { const trav = y <= 3 ? P.prix * 0.15 / 3 : 0; impot = -(resFonc - trav) * P.tmi; }
+      } else if (regime === 'mh') { const trav = y <= 3 ? P.prix * 0.15 / 3 : 0; chargesDed = chExpl + trav; impot = -(resFonc - trav) * P.tmi; }
       else if (regime === 'lmnp' || regime === 'lmp') {
         // BIC : l'amortissement ne peut pas créer de déficit (excédent reporté en amortissements différés)
-        const am = amImmo + P.prix * 0.05 / 10;
+        const am = amImmo + P.prix * 0.05 / 10; amortYear = am;
         const rAvAm = loyer - chExpl - interets;        // résultat avant amortissement
         if (rAvAm < 0) { stock += -rAvAm; impot = 0; }   // déficit BIC (hors amort) reportable
         else {
@@ -600,11 +692,14 @@
         }
       }
       else if (regime === 'sci_is') {
-        cumAm += amImmo; let r2 = loyer - chExpl - interets - amImmo;
+        amortYear = amImmo; cumAm += amImmo; let r2 = loyer - chExpl - interets - amImmo;
         if (r2 < 0) { stock += -r2; impot = 0; }
         else { const ep = Math.min(stock, r2); stock -= ep; r2 -= ep; sciBase = r2; impot = -isOn(r2); }
       }
       let net = (loyer - chExpl - annY) + impot; somE += -net;
+      const capital = annY - interets;
+      fiscalRows.push([y, loyer, chargesDed, interets, amortYear, loyer - chargesDed - interets - amortYear, -impot]);
+      cashRows.push([y, loyer, capital, interets, chExpl, impot, net]);
       if (y === holdY) {
         const sv = P.prix * Math.pow(1 + P.reval, holdY);
         if (regime === 'sci_is') {
@@ -624,10 +719,11 @@
           pvTax = gainBrut > 0 ? gainBrut * (1 - abIR(holdY)) * 0.19 + gainBrut * (1 - abPS(holdY)) * 0.172 : 0;
         }
         saleNet = sv - crd(holdY) - pvTax; net += saleNet;
+        svFinal = sv; crdFinal = crd(holdY);
       }
       cf.push(net);
     }
-    return { tri: irr(cf), effort: somE / holdY / 12, saleNet, gainBrut, pvTax, gainNet: cf.reduce((a, c) => a + c, 0) };
+    return { tri: irr(cf), effort: somE / holdY / 12, saleNet, gainBrut, pvTax, gainNet: cf.reduce((a, c) => a + c, 0), sv: svFinal, crd: crdFinal, fiscalRows, cashRows };
   }
 
   /* -------- Écran : Profil conseiller -------- */
