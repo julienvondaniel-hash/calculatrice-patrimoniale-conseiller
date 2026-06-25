@@ -235,13 +235,14 @@
   <!-- ============ AUTH ============ -->
   <section id="screen-auth">
     <div class="auth-logo"><svg viewBox="0 0 250 56" xmlns="http://www.w3.org/2000/svg" style="width:230px;max-width:78vw;height:auto">
-  <rect x="2" y="8" width="40" height="40" rx="11" fill="#12B981"/>
-  <rect x="11" y="29" width="6" height="11" rx="2" fill="#fff"/>
-  <rect x="20" y="23" width="6" height="17" rx="2" fill="#fff"/>
-  <rect x="29" y="16" width="6" height="24" rx="2" fill="#fff"/>
-  <path d="M12 24 L22 19 L33 13" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="33" cy="13" r="2.4" fill="#fff"/>
-  <text x="52" y="37" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="27" font-weight="800" fill="#4338CA">Mon Kap <tspan fill="#12B981">Pro</tspan></text>
+  <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6366F1"/><stop offset="1" stop-color="#4338CA"/></linearGradient></defs>
+  <rect x="2" y="8" width="40" height="40" rx="11" fill="url(#lg)"/>
+  <g stroke="#fff" stroke-width="3.4" stroke-linecap="round" fill="none">
+    <line x1="15" y1="17" x2="15" y2="39"/>
+    <line x1="15" y1="28" x2="29" y2="17"/>
+    <line x1="20" y1="24" x2="30" y2="39"/>
+  </g>
+  <text x="52" y="37" font-family="Inter,Segoe UI,Arial,sans-serif" font-size="27" font-weight="800" fill="#4338CA">Mon Kap <tspan fill="#16C784">Pro</tspan></text>
 </svg></div>
     <h1 id="auth-title">Connexion</h1>
     <p class="sub" id="auth-sub">Accédez à vos calculatrices patrimoniales</p>
