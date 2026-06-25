@@ -129,30 +129,82 @@
     excel(title, rows, total, opts) {
       opts = opts || {};
       const p = Profile.get();
-      let h = '<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="utf-8"></head><body><table border="1">';
+      const X = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const cT = (t, s) => '<Cell' + (s ? ' ss:StyleID="' + s + '"' : '') + '><Data ss:Type="String">' + X(t) + '</Data></Cell>';
+      const cN = (n, s) => '<Cell' + (s ? ' ss:StyleID="' + s + '"' : '') + '><Data ss:Type="Number">' + (isFinite(n) ? Math.round(n) : 0) + '</Data></Cell>';
+      const cF = (f, n, s) => '<Cell' + (s ? ' ss:StyleID="' + s + '"' : '') + ' ss:Formula="' + X(f) + '"><Data ss:Type="Number">' + (isFinite(n) ? Math.round(n) : 0) + '</Data></Cell>';
+      const Row = c => '<Row>' + c + '</Row>';
+      const empty = () => '<Row/>';
+      const section = (label, style, span) => '<Row><Cell ss:StyleID="' + style + '" ss:MergeAcross="' + (Math.max(1, span) - 1) + '"><Data ss:Type="String">' + X(label) + '</Data></Cell></Row>';
+      let B = '';
       [['Cabinet', p.cabinet], ['Conseiller', p.conseiller], ['Téléphone', p.tel], ['E-mail', p.email], ['Adresse', p.adresse]]
-        .filter(r => r[1]).forEach(r => h += '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>');
-      h += '<tr><td></td><td></td></tr><tr><td><b>' + esc(title) + '</b></td><td>' + new Date().toLocaleDateString('fr-FR') + '</td></tr>';
+        .filter(r => r[1]).forEach(r => B += Row(cT(r[0], 'sLabel') + cT(r[1])));
+      B += Row(cT(title, 'sTitle'));
+      B += Row(cT('Édité le ' + new Date().toLocaleDateString('fr-FR'), 'sMuted'));
+      B += empty();
       if (opts.hypo && opts.hypo.length) {
-        h += '<tr><td></td></tr><tr><td><b>Hypothèses saisies</b></td></tr>';
+        B += section('Hypothèses saisies', 'sFisc', 5);
         for (let i = 0; i < opts.hypo.length; i += 2) {
           const a = opts.hypo[i], b = opts.hypo[i + 1];
-          h += '<tr><td>' + esc(a[0]) + '</td><td>' + esc(a[1]) + '</td><td></td>' + (b ? '<td>' + esc(b[0]) + '</td><td>' + esc(b[1]) + '</td>' : '') + '</tr>';
+          B += Row(cT(a[0], 'sLabel') + cT(a[1]) + cT('') + (b ? cT(b[0], 'sLabel') + cT(b[1]) : ''));
         }
+        B += empty();
       }
       (opts.tables || []).forEach(t => {
-        h += '<tr><td></td></tr><tr><td><b>' + esc(t.title) + '</b></td></tr>';
-        h += '<tr>' + t.head.map(x => '<td><b>' + esc(x) + '</b></td>').join('') + '</tr>';
-        t.rows.forEach(r => h += '<tr>' + r.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>');
+        const span = t.head.length;
+        const sec = t.kind === 'cash' ? 'sCash' : t.kind === 'amort' ? 'sAmort' : 'sFisc';
+        B += section(t.title, sec, span);
+        B += Row(t.head.map(x => cT(x, 'sHead')).join(''));
+        if (t.xl && t.xl.data) {
+          t.xl.data.forEach(d => {
+            let c = '';
+            d.forEach((v, ci) => {
+              if (ci === 0) c += cT(String(v), 'sCenter');
+              else if (t.xl.fcol && t.xl.fcol[ci]) c += cF(t.xl.fcol[ci], v, 'sNum');
+              else c += cN(v, 'sNum');
+            });
+            B += Row(c);
+          });
+          if (t.xl.sum) {
+            const n = t.xl.data.length;
+            let c = cT('Σ', 'sTotL');
+            for (let ci = 1; ci < span; ci++) c += cF('=SUM(R[-' + n + ']C:R[-1]C)', 0, 'sTot');
+            B += Row(c);
+          }
+          (t.xl.extra || []).forEach(ex => {
+            B += Row(ex.map((v, i) => i === 0 ? cT(String(v), 'sLabel') : (v === '' || v == null ? cT('') : (typeof v === 'number' ? cN(v, 'sNumB') : cT(String(v))))).join(''));
+          });
+        } else {
+          t.rows.forEach(r => B += Row(r.map((c, i) => cT(c, i === 0 ? 'sCenter' : '')).join('')));
+        }
+        B += empty();
       });
-      h += '<tr><td></td><td></td></tr><tr><td><b>Synthèse du résultat</b></td><td></td></tr>';
-      h += '<tr><td><b>Indicateur</b></td><td><b>Valeur</b></td></tr>';
-      rows.forEach(r => h += '<tr><td>' + esc(r[0]) + '</td><td>' + esc(r[1]) + '</td></tr>');
-      if (total) h += '<tr><td><b>' + esc(total[0]) + '</b></td><td><b>' + esc(total[1]) + '</b></td></tr>';
-      if (opts.net) h += '<tr><td><b>' + esc(opts.net[0]) + '</b></td><td><b>' + esc(opts.net[1]) + '</b></td></tr>';
-      if (opts.note) h += '<tr><td></td><td></td></tr><tr><td><b>Méthode de calcul</b></td><td>' + esc(opts.note) + '</td></tr>';
-      h += '</table></body></html>';
-      const blob = new Blob(['﻿' + h], { type: 'application/vnd.ms-excel' });
+      B += section('Synthèse du résultat', 'sFisc', 2);
+      rows.forEach(r => B += Row(cT(r[0], 'sLabel') + cT(r[1])));
+      if (total) B += Row(cT(total[0], 'sTotL') + cT(total[1], 'sTotL'));
+      if (opts.net) B += Row(cT(opts.net[0], 'sTotL') + cT(opts.net[1], 'sTotL'));
+      if (opts.note) { B += empty(); B += section('Méthode de calcul', 'sFisc', 2); B += Row(cT(opts.note)); }
+      const styles = '<Styles>'
+        + '<Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center"/><Font ss:FontName="Calibri" ss:Size="10"/></Style>'
+        + '<Style ss:ID="sTitle"><Font ss:Bold="1" ss:Size="14" ss:Color="#1F2547"/></Style>'
+        + '<Style ss:ID="sMuted"><Font ss:Color="#8A8FB0" ss:Size="9"/></Style>'
+        + '<Style ss:ID="sLabel"><Font ss:Color="#3A4063"/></Style>'
+        + '<Style ss:ID="sCenter"><Alignment ss:Horizontal="Center"/></Style>'
+        + '<Style ss:ID="sHead"><Interior ss:Color="#EEF0F7" ss:Pattern="Solid"/><Font ss:Bold="1" ss:Color="#3A4063"/><Alignment ss:Horizontal="Right"/></Style>'
+        + '<Style ss:ID="sFisc"><Interior ss:Color="#4338CA" ss:Pattern="Solid"/><Font ss:Bold="1" ss:Color="#FFFFFF"/></Style>'
+        + '<Style ss:ID="sCash"><Interior ss:Color="#0E8F63" ss:Pattern="Solid"/><Font ss:Bold="1" ss:Color="#FFFFFF"/></Style>'
+        + '<Style ss:ID="sAmort"><Interior ss:Color="#1F2547" ss:Pattern="Solid"/><Font ss:Bold="1" ss:Color="#FFFFFF"/></Style>'
+        + '<Style ss:ID="sNum"><NumberFormat ss:Format="#,##0\\ &quot;€&quot;"/><Alignment ss:Horizontal="Right"/></Style>'
+        + '<Style ss:ID="sNumB"><NumberFormat ss:Format="#,##0\\ &quot;€&quot;"/><Font ss:Bold="1"/><Alignment ss:Horizontal="Right"/></Style>'
+        + '<Style ss:ID="sTot"><NumberFormat ss:Format="#,##0\\ &quot;€&quot;"/><Font ss:Bold="1" ss:Color="#1F2547"/><Interior ss:Color="#F4F6FB" ss:Pattern="Solid"/><Alignment ss:Horizontal="Right"/></Style>'
+        + '<Style ss:ID="sTotL"><Font ss:Bold="1" ss:Color="#1F2547"/><Interior ss:Color="#F4F6FB" ss:Pattern="Solid"/></Style>'
+        + '</Styles>';
+      const xml = '<?xml version="1.0" encoding="UTF-8"?>\n<?mso-application progid="Excel.Sheet"?>\n'
+        + '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">'
+        + styles
+        + '<Worksheet ss:Name="Simulation"><Table>' + B + '</Table></Worksheet>'
+        + '</Workbook>';
+      const blob = new Blob([xml], { type: 'application/vnd.ms-excel' });
       const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
       a.download = (title.replace(/[^\wÀ-ÿ]+/g, '_').replace(/^_|_$/g, '') || 'simulation') + '.xls';
       document.body.append(a); a.click(); a.remove();
@@ -201,7 +253,8 @@
       kind: 'fisc',
       title: pre + 'Détail fiscal (Loyer − Charges − Intérêts − Amortissement = Résultat, puis Impôt)',
       head: ['An', 'Loyer', '− Charges', '− Intérêts', '− Amort.', '= Résultat', 'Impôt'],
-      rows: R.fiscalRows.map(d => [String(d[0]), eN(d[1]), neg(d[2]), neg(d[3]), neg(d[4]), eN(d[5]), eN(d[6])])
+      rows: R.fiscalRows.map(d => [String(d[0]), eN(d[1]), neg(d[2]), neg(d[3]), neg(d[4]), eN(d[5]), eN(d[6])]),
+      xl: { data: R.fiscalRows.map(d => [d[0], d[1], d[2], d[3], d[4], d[5], d[6]]), fcol: { 5: '=RC[-4]-RC[-3]-RC[-2]-RC[-1]' }, sum: true }
     };
     const csum = i => R.cashRows.reduce((a, d) => a + d[i], 0);
     const lastOp = R.cashRows.length ? R.cashRows[R.cashRows.length - 1][6] : 0;
@@ -213,13 +266,16 @@
         ['Revente', '+ ' + eN(R.sv), '', '', neg(R.pvTax) + ' (PV)', R.crd > 0 ? neg(R.crd) + ' (CRD)' : '', '+ ' + eN(R.saleNet)],
         ['Σ totaux', '+ ' + eN(csum(1)), neg(csum(2)), neg(csum(3)), neg(csum(4)), eN(csum(5)), eN(csum(6))],
         ['Flux net an ' + N + ' (avec revente — base du TRI)', '', '', '', '', '', eN(lastOp + R.saleNet)]
-      ])
+      ]),
+      xl: { data: R.cashRows.map(d => [d[0], d[1], d[2], d[3], d[4], d[5], d[6]]), fcol: { 6: '=RC[-5]-RC[-4]-RC[-3]-RC[-2]+RC[-1]' }, sum: true,
+        extra: [['Revente (an ' + N + ')', R.sv, (R.crd > 0 ? -R.crd : 0), '', '', -R.pvTax, R.saleNet], ['Flux net an ' + N + ' (base du TRI)', '', '', '', '', '', lastOp + R.saleNet]] }
     };
     const amort = {
       kind: 'amort',
       title: 'Tableau d\'amortissement de l\'emprunt',
       head: ['An', 'Capital début', 'Annuité', 'Intérêts', 'Capital remb.', 'Capital restant dû'],
-      rows: (R.amortRows || []).map(d => [String(d[0]), eN(d[1]), eN(d[2]), eN(d[3]), eN(d[4]), eN(d[5])])
+      rows: (R.amortRows || []).map(d => [String(d[0]), eN(d[1]), eN(d[2]), eN(d[3]), eN(d[4]), eN(d[5])]),
+      xl: { data: (R.amortRows || []).map(d => [d[0], d[1], d[2], d[3], d[4], d[5]]), fcol: { 2: '=RC[1]+RC[2]', 5: '=RC[-4]-RC[-1]' } }
     };
     return (opts && opts.noAmort) ? [fisc, cash] : [fisc, cash, amort];
   }
@@ -492,14 +548,16 @@
         const achatTables = [
           { kind: 'fisc', title: 'Patrimoine net — acheteur vs locataire',
             head: ['An', 'Valeur bien', '− CRD', 'Patrim. acheteur', 'Placement loc.', 'Patrim. locataire', 'Écart'],
-            rows: detail.map(d => [String(d[0]), eN(d[1]), neg(d[2]), eN(d[3]), eN(d[7]), eN(d[8]), sgn(d[9])]) },
+            rows: detail.map(d => [String(d[0]), eN(d[1]), neg(d[2]), eN(d[3]), eN(d[7]), eN(d[8]), sgn(d[9])]),
+            xl: { data: detail.map(d => [d[0], d[1], d[2], d[3], d[7], d[8], d[9]]), fcol: { 3: '=RC[-2]-RC[-1]', 6: '=RC[-3]-RC[-1]' } } },
           { kind: 'cash', title: 'Cash-flow annuel — décaissements (acheteur) et placement (locataire)',
             head: ['An', 'Mensualités (−)', 'Charges (−)', 'Loyer locataire (−)', 'Différence placée'],
-            rows: detail.map(d => [String(d[0]), neg(d[4]), neg(d[5]), neg(d[6]), sgn(d[4] + d[5] - d[6])]) }
+            rows: detail.map(d => [String(d[0]), neg(d[4]), neg(d[5]), neg(d[6]), sgn(d[4] + d[5] - d[6])]),
+            xl: { data: detail.map(d => [d[0], d[4], d[5], d[6], d[4] + d[5] - d[6]]), fcol: { 4: '=RC[-3]+RC[-2]-RC[-1]' } } }
         ];
-        { let b = loan, cdeb = loan; const ar = [];
-          for (let y = 1; y <= duree; y++) { let itY = 0; for (let mm = 1; mm <= 12; mm++) { const i = b * rM; b -= (pmtM - i); itY += i; } const cfin = Math.max(b, 0); ar.push([String(y), eN(cdeb), eN((cdeb - cfin) + itY), eN(itY), eN(cdeb - cfin), eN(cfin)]); cdeb = cfin; }
-          achatTables.push({ kind: 'amort', title: 'Tableau d\'amortissement de l\'emprunt', head: ['An', 'Capital début', 'Annuité', 'Intérêts', 'Capital remb.', 'Capital restant dû'], rows: ar }); }
+        { let b = loan, cdeb = loan; const ar = [], arN = [];
+          for (let y = 1; y <= duree; y++) { let itY = 0; for (let mm = 1; mm <= 12; mm++) { const i = b * rM; b -= (pmtM - i); itY += i; } const cfin = Math.max(b, 0); ar.push([String(y), eN(cdeb), eN((cdeb - cfin) + itY), eN(itY), eN(cdeb - cfin), eN(cfin)]); arN.push([y, cdeb, (cdeb - cfin) + itY, itY, cdeb - cfin, cfin]); cdeb = cfin; }
+          achatTables.push({ kind: 'amort', title: 'Tableau d\'amortissement de l\'emprunt', head: ['An', 'Capital début', 'Annuité', 'Intérêts', 'Capital remb.', 'Capital restant dû'], rows: ar, xl: { data: arN, fcol: { 2: '=RC[1]+RC[2]', 5: '=RC[-4]-RC[-1]' } } }); }
         simRender(sheet, {
           title: 'Résultats',
           exportTables: achatTables,
