@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Accord de sous-traitance (DPA) — Mon Kap Pro</title>
+<style>
+  :root{--navy:#1F2547;--indigo:#4F46E5;--mint:#16C784;--ink:#1E2348;--slate:#5b6172;--line:#E6E9F2;--bg:#F6F7FB}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:Inter,"Segoe UI",Arial,sans-serif;color:var(--ink);background:var(--bg);line-height:1.62}
+  header.top{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;border-bottom:1px solid var(--line);background:#fff}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:18px;color:var(--navy);text-decoration:none}
+  .logo i{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#6366f1,#4338ca);display:grid;place-items:center;color:#fff;font-size:15px;font-weight:800}
+  .logo .pro{color:var(--mint)}
+  .nav a{font-size:13px;color:var(--slate);text-decoration:none;margin-left:14px}
+  .wrap{max-width:820px;margin:0 auto;padding:30px 22px 80px}
+  h1{font-size:26px;margin:18px 0 4px;color:var(--navy)}
+  .date{color:var(--slate);font-size:13px;margin-bottom:20px}
+  h2{font-size:17px;margin:24px 0 8px;color:var(--indigo)}
+  p,li{font-size:14.5px;color:#2c3150;margin:8px 0}
+  ul{padding-left:22px}
+  a{color:var(--indigo)}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13.5px}
+  td,th{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#EEF0F7}
+  .warn{background:#FFF7E6;border:1px solid #FFE3A3;border-radius:10px;padding:12px 14px;font-size:13px;color:#7a5b00;margin:16px 0}
+  footer{border-top:1px solid var(--line);padding:18px;text-align:center;font-size:12px;color:var(--slate);background:#fff}
+  footer a{margin:0 8px;color:var(--slate)}
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="logo" href="/"><i>K</i> Mon Kap <span class="pro">Pro</span></a>
+  <nav class="nav"><a href="/mentions-legales.html">Mentions légales</a><a href="/confidentialite.html">Confidentialité</a><a href="/cgv.html">CGV</a></nav>
+</header>
+<div class="wrap">
+  <h1>Accord relatif au traitement des données (DPA)</h1>
+  <div class="date">Article 28 du RGPD · Dernière mise à jour : 26/06/2026</div>
+  <div class="warn">⚠️ Document à faire relire par un conseil juridique avant signature. Il s'applique lorsque l'utilisateur professionnel saisit des données relatives à ses propres clients.</div>
+
+  <h2>1. Rôles des parties</h2>
+  <p>Le <b>Client professionnel</b> (notaire, expert-comptable, CGP…) agit en qualité de <b>responsable de traitement</b>. <b>Seine Gestion Privée</b>, éditeur de Mon Kap Pro, agit en qualité de <b>sous-traitant</b>. Le présent accord complète les <a href="/cgv.html">CGV</a>. Le sous-traitant <b>n'exerce aucun contrôle</b> sur les données saisies par le Client et <b>n'est pas responsable de leur licéité ni de leur contenu</b>, qui relèvent de la seule responsabilité du Client en sa qualité de responsable de traitement.</p>
+
+  <h2>2. Description du traitement</h2>
+  <table>
+    <tr><th>Élément</th><th>Détail</th></tr>
+    <tr><td>Nature et finalité</td><td>Hébergement et traitement des paramètres de simulation saisis par le Client pour le compte de ses propres clients</td></tr>
+    <tr><td>Durée</td><td>Durée de l'abonnement du Client</td></tr>
+    <tr><td>Catégories de personnes</td><td>Clients et prospects du Client professionnel</td></tr>
+    <tr><td>Catégories de données</td><td>Données patrimoniales et financières saisies (montants, hypothèses) ; le cas échéant, éléments d'identification fournis par le Client</td></tr>
+  </table>
+
+  <h2>3. Obligations du sous-traitant</h2>
+  <ul>
+    <li>Traiter les données uniquement sur instruction documentée du Client et pour les seules finalités du service ;</li>
+    <li>Garantir la confidentialité et n'autoriser l'accès qu'aux personnes habilitées soumises à une obligation de confidentialité ;</li>
+    <li>Mettre en œuvre des mesures techniques et organisationnelles appropriées (chiffrement des mots de passe, HTTPS, cloisonnement par règles RLS, gestion des secrets côté serveur) ;</li>
+    <li>Assister le Client pour répondre aux demandes d'exercice des droits des personnes concernées ;</li>
+    <li>Notifier au Client toute violation de données dans les meilleurs délais après en avoir pris connaissance ;</li>
+    <li>À la fin de la prestation, supprimer ou restituer les données selon le choix du Client ;</li>
+    <li>Mettre à disposition les informations nécessaires pour démontrer la conformité et permettre des audits raisonnables.</li>
+  </ul>
+
+  <h2>4. Sous-traitants ultérieurs autorisés</h2>
+  <p>Le Client autorise le recours aux sous-traitants ultérieurs suivants, soumis aux mêmes obligations :</p>
+  <table>
+    <tr><th>Prestataire</th><th>Rôle</th><th>Localisation</th></tr>
+    <tr><td>Supabase</td><td>Base de données, authentification</td><td>UE (Union européenne)</td></tr>
+    <tr><td>Vercel</td><td>Hébergement / diffusion</td><td>UE + hors UE (CCT)</td></tr>
+    <tr><td>Stripe</td><td>Paiement</td><td>UE + hors UE (CCT)</td></tr>
+    <tr><td>Resend</td><td>E-mails transactionnels</td><td>UE + hors UE (CCT)</td></tr>
+  </table>
+  <p>Tout nouveau sous-traitant fera l'objet d'une information préalable, le Client pouvant s'y opposer pour motif légitime.</p>
+
+  <h2>5. Transferts hors UE</h2>
+  <p>Les transferts éventuels hors UE sont encadrés par les <b>clauses contractuelles types</b> de la Commission européenne.</p>
+
+  <h2>6. Sécurité et violations</h2>
+  <p>En cas de violation de données susceptible d'engendrer un risque, le sous-traitant en informe le Client sans délai injustifié afin de lui permettre, le cas échéant, de notifier la CNIL et les personnes concernées.</p>
+
+  <h2>7. Sort des données en fin de contrat</h2>
+  <p>À la résiliation, les données sont, au choix du Client, restituées (export) puis supprimées, ou supprimées dans un délai de <b>30 jours</b>, sauf obligation légale de conservation.</p>
+
+  <h2>8. Acceptation</h2>
+  <p>Le présent DPA est réputé accepté lors de la souscription. Une version signée peut être fournie sur demande à <a href="mailto:j.daniel@hexa-patrimoine.com">j.daniel@hexa-patrimoine.com</a>.</p>
+</div>
+<footer>
+  © 2026 Mon Kap Pro · <a href="/mentions-legales.html">Mentions légales</a> · <a href="/confidentialite.html">Confidentialité</a> · <a href="/cgv.html">CGV</a> · <a href="/dpa.html">Sous-traitance (DPA)</a>
+</footer>
+</body>
+</html>
