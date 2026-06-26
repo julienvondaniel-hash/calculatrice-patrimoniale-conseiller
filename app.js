@@ -234,24 +234,33 @@ const Calc = {
      Abattement 152 500 € / bénéficiaire ; 20% jusqu'à 700 000 € de
      part taxable, 31,25% au-delà ; vie-génération : abattement -20%
      d'assiette appliqué AVANT l'abattement de 152 500 €. */
-  art990I({ capital, abattement = 152500, vieGeneration = false }) {
-    const base = vieGeneration ? capital * 0.80 : capital;
-    const afterAbat = Math.max(0, base - abattement);
-    const t20 = Math.min(afterAbat, 700000);
-    const t31 = Math.max(0, afterAbat - 700000);
-    const tax = t20 * 0.20 + t31 * 0.3125;
+  art990I({ capital, beneficiaires, abattement = 152500, vieGeneration = false }) {
+    const list = (beneficiaires && beneficiaires.length) ? beneficiaires : [{ capital: capital || 0 }];
+    const multi = list.length > 1;
+    const rows = [];
+    let totalCap = 0, totalTax = 0;
+    list.forEach((b, i) => {
+      const cap = b.capital || 0;
+      const base = vieGeneration ? cap * 0.80 : cap;
+      const afterAbat = Math.max(0, base - abattement);
+      const t20 = Math.min(afterAbat, 700000);
+      const t31 = Math.max(0, afterAbat - 700000);
+      const tax = t20 * 0.20 + t31 * 0.3125;
+      totalCap += cap; totalTax += tax;
+      const pfx = multi ? '  ' : '';
+      if (multi) rows.push(['Bénéficiaire ' + (i + 1), '']);
+      rows.push([pfx + 'Capitaux versés', eur(cap)]);
+      if (vieGeneration) rows.push([pfx + 'Abattement vie-génération (20%)', '– ' + eur(cap * 0.20)]);
+      rows.push([pfx + 'Abattement', '– ' + eur(abattement)]);
+      rows.push([pfx + 'Assiette taxable', eur(afterAbat)]);
+      rows.push([pfx + 'Taxe 20% (≤ 700 000 €)', eur(t20 * 0.20)]);
+      if (t31 > 0) rows.push([pfx + 'Taxe 31,25% (> 700 000 €)', eur(t31 * 0.3125)]);
+    });
     return {
-      rows: [
-        ['Capitaux versés', eur(capital)],
-        vieGeneration ? ['Abattement vie-génération (20%)', '– ' + eur(capital * 0.20)] : null,
-        ['Abattement', '– ' + eur(abattement)],
-        ['Assiette taxable', eur(afterAbat)],
-        ['Taxe 20% (≤ 700 000 €)', eur(t20 * 0.20)],
-        t31 > 0 ? ['Taxe 31,25% (> 700 000 €)', eur(t31 * 0.3125)] : null,
-      ].filter(Boolean),
-      total: ['Prélèvement total', eur(tax)],
-      net: ['Net transmis au bénéficiaire', eur(capital - tax)],
-      note: "Art. 990 I CGI — primes versées avant 70 ans et après le 13/10/1998. Hors prélèvements sociaux (17,2%)."
+      rows,
+      total: ['Prélèvement total', eur(totalTax)],
+      net: ['Net transmis ' + (multi ? 'aux bénéficiaires' : 'au bénéficiaire'), eur(totalCap - totalTax)],
+      note: "Art. 990 I CGI — abattement de 152 500 € PAR bénéficiaire ; 20% jusqu'à 700 000 € de part taxable puis 31,25%, appliqués par bénéficiaire. Primes versées avant 70 ans et après le 13/10/1998. Hors prélèvements sociaux (17,2%)."
     };
   },
 
@@ -1074,11 +1083,27 @@ const Screens = {
     const v = el('div', {});
     v.append(hero('ASSURANCE-VIE', 'Fiscalité décès – 990 I', ICON_PERSON));
     const sheet = el('div', { class: 'sheet' });
-    sheet.append(field('Capitaux versés', moneyInput('c-capital'), 'Primes + produits, par bénéficiaire'));
+    const nbCard = el('div', { class: 'card' }, [el('label', { class: 'field-label center' }, 'Nombre de bénéficiaires')]);
+    const nbSel = selectField('c-nb', [['1', '1 bénéficiaire'], ['2', '2 bénéficiaires'], ['3', '3 bénéficiaires'], ['4', '4 bénéficiaires']], '1');
+    nbCard.append(nbSel);
+    sheet.append(nbCard);
+    const benefBox = el('div', { id: 'c-benefs' });
+    sheet.append(benefBox);
+    function renderBenefs(n) {
+      benefBox.innerHTML = '';
+      for (let i = 1; i <= n; i++) {
+        const c = el('div', { class: 'card' }, [el('div', { class: 'sub-title' }, 'Bénéficiaire ' + i)]);
+        c.append(el('label', { class: 'field-label', style: 'font-size:16px' }, 'Capitaux versés (primes + produits)'));
+        c.append(moneyInput('c-b' + i + '-cap'));
+        benefBox.append(c);
+      }
+    }
+    renderBenefs(1);
+    $('select', nbSel).addEventListener('change', e => renderBenefs(parseInt(e.target.value)));
     const cardVG = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Contrat vie-génération')]);
     cardVG.append(toggleGroup('c-vg', [['non', 'Non'], ['oui', 'Oui']], 'non'));
     sheet.append(cardVG);
-    const cardAb = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Abattement')]);
+    const cardAb = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Abattement (par bénéficiaire)')]);
     const abToggle = toggleGroup('c-abat', [['152500', '152 500 €'], ['autre', 'Autre']], '152500');
     cardAb.append(abToggle);
     const abWrap = el('div', { class: 'input-wrap', id: 'c-abat-wrap', style: 'display:none;margin-top:12px' }, [
@@ -1090,9 +1115,11 @@ const Screens = {
       abWrap.style.display = abToggle.dataset.value === 'autre' ? 'block' : 'none';
     }));
     sheet.append(actions(() => {
-      const capital = num($('#c-capital').value);
+      const n = parseInt($('#c-nb').value);
+      const beneficiaires = [];
+      for (let i = 1; i <= n; i++) beneficiaires.push({ capital: num($('#c-b' + i + '-cap').value) });
       const ab = getToggle('c-abat') === 'autre' ? num($('#c-abat-val').value) : 152500;
-      renderResult(sheet, Calc.art990I({ capital, abattement: ab, vieGeneration: getToggle('c-vg') === 'oui' }));
+      renderResult(sheet, Calc.art990I({ beneficiaires, abattement: ab, vieGeneration: getToggle('c-vg') === 'oui' }));
     }));
     v.append(sheet);
     return v;
