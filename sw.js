@@ -1,4 +1,4 @@
-const CACHE = 'monkappro-v16';
+const CACHE = 'monkappro-v18';
 const ASSETS = ['./', './index.html', './app.js', './simulateurs.js', './config.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 // Recrée une réponse "propre" (sans redirection) — corrige l'erreur Safari
@@ -32,8 +32,14 @@ self.addEventListener('fetch', e => {
   const u = new URL(req.url);
   if (u.origin !== location.origin) return; // laisse passer Supabase / Stripe / CDN
 
-  // Navigations : on sert toujours l'app-shell (jamais une réponse redirigée)
+  // Navigations
   if (req.mode === 'navigate') {
+    // Vraies pages statiques (légales, landing) : réseau d'abord, NE PAS servir l'app-shell
+    if (/\.html$/.test(u.pathname) && !/index\.html$/.test(u.pathname)) {
+      e.respondWith(fetch(req).then(r => clean(r)).catch(() => caches.match(req)));
+      return;
+    }
+    // Reste : on sert toujours l'app-shell (jamais une réponse redirigée)
     e.respondWith((async () => {
       const cached = await caches.match('./index.html');
       if (cached) return cached;
