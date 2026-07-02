@@ -295,6 +295,21 @@
   }
   function abIR(n) { let a = 0; for (let y = 6; y <= Math.min(n, 22); y++) a += y <= 21 ? 0.06 : 0.04; return Math.min(a, 1); }
   function abPS(n) { let a = 0; for (let y = 6; y <= Math.min(n, 30); y++) a += y <= 21 ? 0.0165 : (y === 22 ? 0.016 : 0.09); return Math.min(a, 1); }
+  // Surtaxe sur les plus-values immobilières imposables (base IR après abattement) > 50 000 € — art. 1609 nonies G / 150 VD bis
+  function surtaxePV(pv) {
+    pv = Math.round(pv);
+    if (pv <= 50000) return 0;
+    if (pv <= 60000) return 0.02 * pv - (60000 - pv) / 20;
+    if (pv <= 100000) return 0.02 * pv;
+    if (pv <= 110000) return 0.03 * pv - (110000 - pv) / 10;
+    if (pv <= 150000) return 0.03 * pv;
+    if (pv <= 160000) return 0.04 * pv - (160000 - pv) * 0.15;
+    if (pv <= 200000) return 0.04 * pv;
+    if (pv <= 210000) return 0.05 * pv - (210000 - pv) * 0.20;
+    if (pv <= 250000) return 0.05 * pv;
+    if (pv <= 260000) return 0.06 * pv - (260000 - pv) * 0.25;
+    return 0.06 * pv;
+  }
 
   /* ---------- rendu : carte graphique + bloc résultat ---------- */
   function simRender(sheet, res) {
@@ -683,49 +698,64 @@
     v.append(hero('SIMULATEUR', compare ? 'SCI à l\'IS vs IR' : 'Immobilier — TRI', SW));
     const sheet = el('div', { class: 'sheet' });
     const pfx = compare ? 's' : 'm';
+    let regSelect = null;
     if (!compare) {
       const cR = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Régime fiscal')]);
       cR.append(selectField(pfx + '-reg', [['rf', 'Revenus fonciers (réel)'], ['deficit', 'Déficit foncier'], ['lmnp', 'LMNP (amortissement)'], ['lmp', 'LMP'], ['sci_is', 'SCI à l\'IS'], ['malraux', 'Malraux'], ['mh', 'Monument historique']], 'rf'));
       sheet.append(cR);
+      regSelect = cR.querySelector('select');
     }
-    sheet.append(field('Prix du bien (frais inclus)', moneyInput(pfx + '-prix', compare ? '600000' : '300000')));
-    sheet.append(field('Rendement locatif brut', pctInput(pfx + '-rdt', compare ? '8' : '3,5')));
+    sheet.append(field('Prix du bien (hors frais)', moneyInput(pfx + '-prix', compare ? '600000' : '300000')));
+    sheet.append(field('Frais d\'acquisition / notaire', pctInput(pfx + '-not', '7,5'), 'Ajoutés au prix ; ≈ 7–8 % ancien, 2–3 % neuf. Ne produisent pas de loyer et majorent le prix d\'acquisition pour la plus-value.'));
+    sheet.append(field('Rendement locatif brut', pctInput(pfx + '-rdt', compare ? '8' : '3,5'), 'Loyer annuel ÷ prix hors frais.'));
+    sheet.append(field('Vacance & impayés (% du loyer)', pctInput(pfx + '-vac', '5'), 'Réduit le loyer encaissé et déclaré (≈ 1 mois/an = 8 %).'));
     sheet.append(field('Indexation du loyer (IRL)', pctInput(pfx + '-irl', '1')));
     sheet.append(field('Revalorisation du bien / an', pctInput(pfx + '-reval', '1')));
     sheet.append(field('Capital emprunté', moneyInput(pfx + '-emp', compare ? '550000' : '300000')));
     sheet.append(field('Taux d\'emprunt', pctInput(pfx + '-taux', compare ? '3' : '2')));
+    sheet.append(field('Assurance emprunteur (ADI)', pctInput(pfx + '-adi', '0,3'), 'Par an, sur le capital emprunté ; intégrée au coût du crédit et déductible.'));
     sheet.append(field('Durée du crédit', stepper(pfx + '-dc', 20, 1, 40)));
     sheet.append(field('Durée de détention', stepper(pfx + '-hold', 20, 1, 40)));
     sheet.append(field('Taxe foncière annuelle', moneyInput(pfx + '-tf', compare ? '4000' : '875')));
     sheet.append(field('Frais de gestion (% du loyer)', pctInput(pfx + '-gest', compare ? '6' : '12')));
-    sheet.append(field('Travaux / an (% du loyer)', pctInput(pfx + '-trav', '0')));
+    sheet.append(field('Travaux / an (% du loyer)', pctInput(pfx + '-trav', '0'), 'Moyenne lissée. Les gros postes ponctuels (toiture, ravalement) ne sont pas modélisés année par année.'));
     sheet.append(field('Assurance PNO annuelle', moneyInput(pfx + '-pno', compare ? '1200' : '150')));
     const cT = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'TMI (régime IR)')]);
     cT.append(selectField(pfx + '-tmi', TMI_OPTS, compare ? '30' : '41')); sheet.append(cT);
     sheet.append(field('Prélèvements sociaux', pctInput(pfx + '-ps', compare ? '17' : '17,2')));
-    sheet.append(field('Amortissement immobilier (durée, IS/LMNP)', stepper(pfx + '-am', 30, 1, 50)));
+    const amWrap = field('Amortissement immobilier (durée) — LMNP / LMP / SCI à l\'IS', stepper(pfx + '-am', 30, 1, 50));
+    sheet.append(amWrap);
+    if (regSelect) {
+      const syncAm = () => { const r = regSelect.value; amWrap.style.display = (r === 'lmnp' || r === 'lmp' || r === 'sci_is') ? '' : 'none'; };
+      regSelect.addEventListener('change', syncAm); syncAm();
+    }
 
     sheet.append(actions(() => {
       const P = {
         prix: gv(pfx + '-prix'), rdt: gv(pfx + '-rdt') / 100, irl: gv(pfx + '-irl') / 100, reval: gv(pfx + '-reval') / 100,
         emp: gv(pfx + '-emp'), taux: gv(pfx + '-taux') / 100, dc: Math.max(1, Math.round(gv(pfx + '-dc'))), hold: Math.max(1, Math.round(gv(pfx + '-hold'))),
         tf: gv(pfx + '-tf'), gest: gv(pfx + '-gest') / 100, trav: gv(pfx + '-trav') / 100, pno: gv(pfx + '-pno'),
-        tmi: gv(pfx + '-tmi') / 100, ps: gv(pfx + '-ps') / 100, amDuree: Math.max(1, Math.round(gv(pfx + '-am')))
+        tmi: gv(pfx + '-tmi') / 100, ps: gv(pfx + '-ps') / 100, amDuree: Math.max(1, Math.round(gv(pfx + '-am'))),
+        notaire: gv(pfx + '-not') / 100, adi: gv(pfx + '-adi') / 100, vac: gv(pfx + '-vac') / 100
       };
       if (!compare) {
         const reg = gvSel(pfx + '-reg'), R = immoScenario(P, reg, P.hold);
+        const triLow = immoScenario({ ...P, reval: P.reval - 0.01 }, reg, P.hold).tri;
+        const triHigh = immoScenario({ ...P, reval: P.reval + 0.01 }, reg, P.hold).tri;
+        const fp = t => t === null ? 'n/a' : p2(t * 100);
         simRender(sheet, {
           title: 'Résultats',
           exportTables: immoExportTables(R),
           rows: [
             ['TRI du projet', R.tri === null ? 'n/a' : p2(R.tri * 100)],
+            ['TRI si revalorisation ±1 %/an', fp(triLow) + '  …  ' + fp(triHigh)],
             ['Effort d\'épargne moyen', eMo(R.effort)],
             ['Valeur nette à la revente', e0(R.saleNet)],
             ['Plus-value brute', e0(R.gainBrut)],
             ['Impôt sur la plus-value', e0(R.pvTax)],
           ],
           total: ['Gain net total', e0(R.gainNet)],
-          note: 'Loyers indexés IRL, charges réelles déductibles, plus-value selon le régime. Indicatif, hors cas particuliers.'
+          note: 'Frais de notaire ajoutés au prix (n\'entrent pas dans le loyer, majorent le prix d\'acquisition pour la plus-value). Loyer net de vacance/impayés et indexé IRL. Assurance emprunteur incluse dans le coût du crédit. Plus-value selon le régime, avec surtaxe au-delà de 50 000 € de PV imposable. Revalorisation déterministe : voir la sensibilité ±1 %. Indicatif, hors cas particuliers.'
         });
       } else {
         const IR = immoScenario(P, 'rf', P.hold), IS = immoScenario(P, 'sci_is', P.hold);
@@ -752,7 +782,8 @@
 
   /* ---------- moteur immobilier (un régime, durée variable) ---------- */
   function immoScenario(P, regime, holdY) {
-    const loyerBase = P.prix * P.rdt, assurEmp = 0;
+    const fraisNotaire = P.prix * (P.notaire || 0), coutTotal = P.prix + fraisNotaire;
+    const loyerBase = P.prix * P.rdt * (1 - (P.vac || 0));
     const rM = P.taux / 12, nM = P.dc * 12;
     const pmtM = rM === 0 ? P.emp / nM : P.emp * rM / (1 - Math.pow(1 + rM, -nM)), annuite = pmtM * 12;
     let bal = P.emp; const intM = [], balM = [];
@@ -760,11 +791,11 @@
     const yint = y => { let s = 0; for (let m = (y - 1) * 12; m < y * 12 && m < nM; m++) s += intM[m]; return s; };
     const crd = y => { const idx = Math.min(y * 12, nM) - 1; return idx >= 0 ? balM[idx] : P.emp; };
     const loyerY = y => loyerBase * Math.pow(1 + P.irl, y - 1);
-    const chExplY = y => { const lo = loyerY(y); return P.tf * Math.pow(1.01, y - 1) + P.pno * Math.pow(1.01, y - 1) + lo * (P.gest + P.trav) + assurEmp; };
-    const amImmo = P.prix * 0.8 / P.amDuree, isSeuil = 42500, isReduit = 0.15, isTaux = 0.25;
+    const chExplY = y => { const lo = loyerY(y), adi = (y <= P.dc ? P.emp * (P.adi || 0) : 0); return P.tf * Math.pow(1.01, y - 1) + P.pno * Math.pow(1.01, y - 1) + lo * (P.gest + P.trav) + adi; };
+    const amImmo = coutTotal * 0.8 / P.amDuree, isSeuil = 42500, isReduit = 0.15, isTaux = 0.25;
     const isOn = x => x <= 0 ? 0 : Math.min(x, isSeuil) * isReduit + Math.max(x - isSeuil, 0) * isTaux;
     let stock = 0, cumAm = 0, cumAmLoc = 0, amStock = 0, deficitRep = 0;
-    const apport = Math.max(P.prix - P.emp, 0);
+    const apport = Math.max(coutTotal - P.emp, 0);
     const cf = [-apport]; let somE = 0, saleNet = 0, gainBrut = 0, pvTax = 0;
     const fiscalRows = [], cashRows = []; let svFinal = 0, crdFinal = 0;
     for (let y = 1; y <= holdY; y++) {
@@ -813,20 +844,23 @@
       if (y === holdY) {
         const sv = P.prix * Math.pow(1 + P.reval, holdY);
         if (regime === 'sci_is') {
-          const vnc = Math.max(P.prix - cumAm, 0); gainBrut = Math.max(sv - vnc, 0);
+          const vnc = Math.max(coutTotal - cumAm, 0); gainBrut = Math.max(sv - vnc, 0);
           pvTax = isOn(sciBase + gainBrut) - isOn(sciBase);                  // PV imposée en partageant le seuil 15% de l'année
         } else if (regime === 'lmp') {
           // plus-value professionnelle : court terme (amortissements déduits) au barème ; long terme (appréciation) au PFU 30%
-          const pvCT = cumAmLoc, pvLT = Math.max(sv - P.prix, 0);
+          const pvCT = cumAmLoc, pvLT = Math.max(sv - coutTotal, 0);
           gainBrut = pvCT + pvLT;
           pvTax = pvCT * (P.tmi + P.ps) + pvLT * 0.30;
         } else if (regime === 'lmnp') {
           // LF 2025 : réintégration des amortissements déduits dans la plus-value des particuliers
-          gainBrut = Math.max(sv - P.prix + cumAmLoc, 0);
-          pvTax = gainBrut > 0 ? gainBrut * (1 - abIR(holdY)) * 0.19 + gainBrut * (1 - abPS(holdY)) * 0.172 : 0;
+          gainBrut = Math.max(sv - coutTotal + cumAmLoc, 0);
+          const pvIR = gainBrut * (1 - abIR(holdY));
+          pvTax = gainBrut > 0 ? pvIR * 0.19 + gainBrut * (1 - abPS(holdY)) * 0.172 + surtaxePV(pvIR) : 0;
         } else {
-          gainBrut = Math.max(sv - P.prix, 0);
-          pvTax = gainBrut > 0 ? gainBrut * (1 - abIR(holdY)) * 0.19 + gainBrut * (1 - abPS(holdY)) * 0.172 : 0;
+          // plus-value des particuliers : prix d'acquisition majoré des frais réels (art. 150 VB)
+          gainBrut = Math.max(sv - coutTotal, 0);
+          const pvIR = gainBrut * (1 - abIR(holdY));
+          pvTax = gainBrut > 0 ? pvIR * 0.19 + gainBrut * (1 - abPS(holdY)) * 0.172 + surtaxePV(pvIR) : 0;
         }
         saleNet = sv - crd(holdY) - pvTax; net += saleNet;
         svFinal = sv; crdFinal = crd(holdY);
