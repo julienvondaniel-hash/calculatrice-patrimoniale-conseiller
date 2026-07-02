@@ -370,19 +370,31 @@
       const v = el('div', {});
       v.append(hero('CALCULATRICE', 'Simulateurs'));
       const sheet = el('div', { class: 'sheet' });
-      [
-        ['Épargne-retraite (Monte Carlo)', 'sim_retraite'],
-        ['Capital par classe d\'actifs', 'sim_capital'],
-        ['Immobilier locatif — TRI', 'sim_immo'],
-        ['SCI à l\'IS vs SCI à l\'IR', 'sim_sci'],
-        ['Acheter vs Louer', 'sim_achat'],
-        ['Transmission — Pacte Dutreil', 'sim_dutreil'],
-        ['Apport-cession 150-0 B ter', 'sim_apport'],
-        ['★ Mes simulations enregistrées', 'sim_saved'],
-      ].forEach(([t, key]) => {
-        const ok = (typeof Billing === 'undefined') || Billing.allows(key);
-        const right = ok ? el('div', { class: 'ma' }) : el('div', { style: 'background:#12B981;color:#08362a;font-weight:800;font-size:11px;padding:5px 9px;border-radius:20px' }, '9,99 €');
-        sheet.append(el('div', { class: 'menu-item', onclick: () => ok ? Router.go(key) : Router.go('upgrade') }, [el('div', { class: 'mt' }, t), right]));
+      const groups = [
+        ['Immobilier', [
+          ['Immobilier locatif — TRI', 'sim_immo'],
+          ['SCI à l\'IS vs SCI à l\'IR', 'sim_sci'],
+          ['Acheter vs Louer', 'sim_achat'],
+        ]],
+        ['Transmission d\'entreprise', [
+          ['Pacte Dutreil (787 B)', 'sim_dutreil'],
+          ['Apport-cession 150-0 B ter', 'sim_apport'],
+        ]],
+        ['Épargne & retraite', [
+          ['Épargne-retraite (Monte Carlo)', 'sim_retraite'],
+          ['Capital par classe d\'actifs', 'sim_capital'],
+        ]],
+        ['Mes dossiers', [
+          ['★ Mes simulations enregistrées', 'sim_saved'],
+        ]],
+      ];
+      groups.forEach(([label, items]) => {
+        sheet.append(el('div', { class: 'group-label' }, label));
+        items.forEach(([t, key]) => {
+          const ok = (typeof Billing === 'undefined') || Billing.allows(key);
+          const right = ok ? el('div', { class: 'ma' }) : el('div', { style: 'background:#12B981;color:#08362a;font-weight:800;font-size:11px;padding:5px 9px;border-radius:20px' }, '9,99 €');
+          sheet.append(el('div', { class: 'menu-item', onclick: () => ok ? Router.go(key) : Router.go('upgrade') }, [el('div', { class: 'mt' }, t), right]));
+        });
       });
       v.append(sheet); return v;
     },
@@ -443,6 +455,13 @@
         const f = Array.from(fin).sort((a, b) => a - b);
         simRender(sheet, {
           title: 'Résultats',
+          exportTables: [{
+            kind: 'fisc',
+            title: 'Projection annuelle du capital (Monte Carlo — P10 / médiane / P90)',
+            head: ['Année', 'Âge', 'Total versé', 'Pessimiste (P10)', 'Médian (P50)', 'Optimiste (P90)'],
+            rows: P10.map((_, yk) => [String(yk), String(age + yk), e0(ref[yk]), e0(P10[yk]), e0(P50[yk]), e0(P90[yk])]),
+            xl: { data: P10.map((_, yk) => [yk, age + yk, Math.round(ref[yk]), Math.round(P10[yk]), Math.round(P50[yk]), Math.round(P90[yk])]) }
+          }],
           charts: [{ title: 'Capital projeté (Monte Carlo)', draw: cv => fanChart(cv, { P10, P50, P90, ref }), legend: '— médiane · zone P10–P90 · - - total versé' }],
           rows: [
             ['Capital à la retraite (moyen)', e0(cap)],
@@ -486,6 +505,13 @@
         const f = Array.from(fin).sort((a, b) => a - b), verse = c0 + vers * months, med = quantile(f, .5);
         simRender(sheet, {
           title: 'Résultats',
+          exportTables: [{
+            kind: 'fisc',
+            title: 'Projection annuelle du capital (Monte Carlo — P10 / médiane / P90)',
+            head: ['Année', 'Total versé', 'Pessimiste (P10)', 'Médian (P50)', 'Optimiste (P90)'],
+            rows: P10.map((_, yk) => [String(yk), e0(ref[yk]), e0(P10[yk]), e0(P50[yk]), e0(P90[yk])]),
+            xl: { data: P10.map((_, yk) => [yk, Math.round(ref[yk]), Math.round(P10[yk]), Math.round(P50[yk]), Math.round(P90[yk])]) }
+          }],
           charts: [{ title: 'Capital projeté', draw: cv => fanChart(cv, { P10, P50, P90, ref }), legend: '— médiane · zone P10–P90 · - - total versé' }],
           rows: [
             ['Total versé', e0(verse)],
