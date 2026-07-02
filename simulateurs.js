@@ -43,7 +43,7 @@
     }
   };
   function loadSaved(p) {
-    Router.reset('sim'); Router.go(p.screen);
+    Router.reset('home'); Router.go(p.screen);
     setTimeout(() => {
       Object.entries(p.inputs || {}).forEach(([id, val]) => { const e = document.getElementById(id); if (e) { e.value = val; e.dispatchEvent(new Event('input')); e.dispatchEvent(new Event('change')); } });
       const btn = $('#view .sheet .btn-primary'); if (btn) btn.click();
