@@ -206,6 +206,26 @@
     .inp{font-size:17px}
   }
 
+  /* ---------- Ordinateur (bureau) : élargissement responsive ---------- */
+  @media (min-width:860px){
+    body{background:#EEF0F7}
+    #app{max-width:920px;box-shadow:0 18px 60px rgba(27,37,89,.12);min-height:100dvh}
+    .sheet{
+      display:grid;grid-template-columns:1fr 1fr;gap:12px;align-content:start;
+      padding:26px 26px 110px;
+    }
+    /* Les éléments pleine largeur (titres de groupe, cartes, boutons, résultats)
+       s'étendent sur les 2 colonnes ; seuls les menu-item se répartissent en grille. */
+    .sheet > :not(.menu-item){grid-column:1 / -1}
+    .menu-item{margin-bottom:0;height:100%}
+    .group-label{margin:10px 4px 2px}
+    .hero{padding-left:26px;padding-right:26px}
+  }
+  @media (min-width:1200px){
+    #app{max-width:1040px}
+    .sheet{grid-template-columns:1fr 1fr 1fr}
+  }
+
   /* ---------- Export PDF (impression) ---------- */
   #print-root{display:none}
   @media print{
