@@ -991,6 +991,13 @@ function renderResult(sheet, res) {
   safeScroll(box);
 }
 function safeScroll(node) { try { if (node.scrollIntoView) node.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {} }
+/* Élément de menu vers un simulateur, avec gating d'abonnement (badge 9,99 € si offre insuffisante) */
+function simMenuItem(sheet, title, key) {
+  const ok = (typeof Billing === 'undefined') || (Billing.allows ? Billing.allows(key) : true);
+  const right = ok ? el('div', { class: 'ma' })
+    : el('div', { style: 'background:#12B981;color:#08362a;font-weight:800;font-size:11px;padding:5px 9px;border-radius:20px' }, '9,99 €');
+  sheet.append(el('div', { class: 'menu-item', onclick: () => ok ? Router.go(key) : Router.go('upgrade') }, [el('div', { class: 'mt' }, title), right]));
+}
 
 /* ============================================================
    ICÔNES
@@ -1028,11 +1035,12 @@ const Screens = {
     const cats = [
       ['Assurance-Vie', 'av', 'Fiscalité décès & rachat'],
       ['Fiscalité des particuliers', 'part', 'IR, CEHR, dividendes, plus-values'],
-      ['Immobilier', 'immo', 'DMTO, IFI, plus-values, foncier, démembrement'],
+      ['Immobilier', 'immo', 'Calculatrices + simulateurs (TRI, SCI, Acheter/Louer)'],
+      ['Transmission d\'entreprise', 'transmission', 'Pacte Dutreil & Apport-cession 150-0 B ter'],
       ['Succession / Donation', 'succ', 'DMTG droits simples & inclus'],
+      ['Épargne & retraite', 'epargne', 'Monte Carlo, capitalisation, dossiers enregistrés'],
       ['Société', 'soc', 'Impôt sur les sociétés'],
       ['Actualisation / Capitalisation / Emprunt', 'fin', 'Intérêts, taux, emprunt'],
-      ['Simulateurs patrimoniaux', 'sim', 'Retraite, immobilier, SCI, achat/location, Dutreil…'],
     ];
     cats.forEach(([title, key, sub]) => {
       sheet.append(el('div', { class: 'menu-item', onclick: () => Router.go(key) }, [
@@ -1312,6 +1320,7 @@ const Screens = {
     const v = el('div', {});
     v.append(hero('CALCULATRICE', 'Immobilier'));
     const sheet = el('div', { class: 'sheet' });
+    sheet.append(el('div', { class: 'group-label' }, 'Calculatrices'));
     [
       ['DMTO Achat', 'i_dmto'],
       ['IFI', 'i_ifi'],
@@ -1319,6 +1328,28 @@ const Screens = {
       ['Revenus fonciers', 'i_foncier'],
       ['Démembrement', 'i_demembrement'],
     ].forEach(([t, key]) => sheet.append(el('div', { class: 'menu-item', onclick: () => Router.go(key) }, [el('div', { class: 'mt' }, t), el('div', { class: 'ma' })])));
+    sheet.append(el('div', { class: 'group-label' }, 'Simulateurs'));
+    [['Immobilier locatif — TRI', 'sim_immo'], ['SCI à l\'IS vs SCI à l\'IR', 'sim_sci'], ['Acheter vs Louer', 'sim_achat']]
+      .forEach(([t, key]) => simMenuItem(sheet, t, key));
+    v.append(sheet); return v;
+  },
+  transmission() {
+    const v = el('div', {});
+    v.append(hero('CALCULATRICE', 'Transmission d\'entreprise'));
+    const sheet = el('div', { class: 'sheet' });
+    [['Pacte Dutreil (787 B)', 'sim_dutreil'], ['Apport-cession 150-0 B ter', 'sim_apport']]
+      .forEach(([t, key]) => simMenuItem(sheet, t, key));
+    v.append(sheet); return v;
+  },
+  epargne() {
+    const v = el('div', {});
+    v.append(hero('CALCULATRICE', 'Épargne & retraite'));
+    const sheet = el('div', { class: 'sheet' });
+    sheet.append(el('div', { class: 'group-label' }, 'Simulateurs'));
+    [['Épargne-retraite (Monte Carlo)', 'sim_retraite'], ['Capital par classe d\'actifs', 'sim_capital']]
+      .forEach(([t, key]) => simMenuItem(sheet, t, key));
+    sheet.append(el('div', { class: 'group-label' }, 'Mes dossiers'));
+    simMenuItem(sheet, '★ Mes simulations enregistrées', 'sim_saved');
     v.append(sheet); return v;
   },
   succ() {
