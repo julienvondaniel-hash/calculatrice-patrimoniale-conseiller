@@ -817,20 +817,54 @@ Object.assign(Calc, {
     // surtaxe sur PV > 50 000 € (base IR)
     let surtaxe = 0;
     if (baseIR > 50000) surtaxe = surtaxePVImmo(baseIR);
+    const totalImp = ir + ps + surtaxe, pvNette = pvBrute - totalImp;
+
+    // ---- Export détaillé : cascade de calcul (PDF + Excel avec formules vivantes) ----
+    const e0 = v => eur(Math.round(v));
+    const nf = v => (Math.round(v * 100) / 100).toString().replace('.', ',');   // % à la française
+    const coefIR = Math.round((1 - abIR / 100) * 1e6) / 1e6;   // coefficient net d'abattement IR (ex. 0.82)
+    const coefPS = Math.round((1 - abPS / 100) * 1e6) / 1e6;   // coefficient net d'abattement PS (ex. 0.9505)
+    // [label, montant affiché (PDF), cellule Excel (nombre ou {f,v}), texte « Calcul »]
+    const casc = [
+      ['Prix de cession', e0(prixCession), prixCession, 'saisi'],
+      ['− Frais de cession', '− ' + e0(fraisCession), fraisCession, 'frais de vente déductibles'],
+      ['= Prix de cession net (A)', e0(prixCessionNet), { f: '=R[-2]C-R[-1]C', v: prixCessionNet }, 'prix de cession − frais'],
+      ['Prix d\'acquisition', e0(prixAcquisition), prixAcquisition, 'saisi'],
+      ['+ Frais d\'acquisition', '+ ' + e0(fraisAcq), fraisAcqForfait ? { f: '=R[-1]C*0.075', v: fraisAcq } : fraisAcq, fraisAcqForfait ? '7,5 % × ' + e0(prixAcquisition) : 'frais réels'],
+      ['+ Travaux', '+ ' + e0(fraisTravaux), fraisTravaux, 'travaux (frais réels)'],
+      ['= Prix de revient majoré (B)', e0(prixAcqMajore), { f: '=R[-3]C+R[-2]C+R[-1]C', v: prixAcqMajore }, 'acquisition + frais + travaux'],
+      ['= Plus-value brute (A − B)', e0(pvBrute), { f: '=MAX(0,R[-5]C-R[-1]C)', v: pvBrute }, e0(prixCessionNet) + ' − ' + e0(prixAcqMajore)],
+      ['Base imposable IR (abatt. ' + nf(abIR) + ' %)', e0(baseIR), { f: '=R[-1]C*' + coefIR, v: baseIR }, 'PV brute × (1 − ' + nf(abIR) + ' %)'],
+      ['Base imposable PS (abatt. ' + nf(abPS) + ' %)', e0(basePS), { f: '=R[-2]C*' + coefPS, v: basePS }, 'PV brute × (1 − ' + nf(abPS) + ' %)'],
+      ['Impôt sur le revenu (19 %)', e0(ir), { f: '=R[-2]C*0.19', v: ir }, 'base IR × 19 %'],
+      ['Prélèvements sociaux (17,2 %)', e0(ps), { f: '=R[-2]C*0.172', v: ps }, 'base PS × 17,2 %'],
+      ['Surtaxe (PV imposable > 50 000 €)', e0(surtaxe), surtaxe, surtaxe > 0 ? 'barème progressif 2 à 6 %' : 'non applicable'],
+      ['Imposition totale', e0(totalImp), { f: '=R[-3]C+R[-2]C+R[-1]C', v: totalImp }, 'IR + PS + surtaxe'],
+      ['Plus-value nette', e0(pvNette), { f: '=R[-7]C-R[-1]C', v: pvNette }, 'PV brute − imposition'],
+    ];
+    const cascade = {
+      kind: 'casc',
+      title: 'Détail du calcul de la plus-value — étape par étape',
+      head: ['Étape', 'Montant', 'Calcul'],
+      rows: casc.map(r => [r[0], r[1], r[3]]),
+      xl: { data: casc.map(r => [r[0], r[2], r[3]]) }
+    };
+
     return {
       rows: [
         ['Prix de cession net', eur(prixCessionNet)],
         ['Prix d\'acquisition majoré', eur(prixAcqMajore)],
         ['Plus-value brute', eur(pvBrute)],
-        ['Abattement IR / PS', `${abIR}% / ${abPS}%`],
+        ['Abattement IR / PS', `${nf(abIR)}% / ${nf(abPS)}%`],
         ['Base imposable IR', eur(baseIR)],
         ['Impôt IR (19%)', eur(ir)],
         ['Prélèvements sociaux (17,2%)', eur(ps)],
         surtaxe > 0 ? ['Surtaxe (PV > 50 000 €)', eur(surtaxe)] : null,
       ].filter(Boolean),
-      total: ['Imposition totale', eur(ir + ps + surtaxe)],
-      net: ['Plus-value nette', eur(pvBrute - ir - ps - surtaxe)],
-      note: terrainABatir ? "Terrain à bâtir : mêmes règles d'abattement depuis 2014." : "Résidence principale exonérée. IR 19% + PS 17,2%. Exonération IR à 22 ans, PS à 30 ans de détention."
+      exportTables: [cascade],
+      total: ['Imposition totale', eur(totalImp)],
+      net: ['Plus-value nette', eur(pvNette)],
+      note: terrainABatir ? "Terrain à bâtir : mêmes règles d'abattement depuis 2014." : "Résidence principale exonérée. IR 19% + PS 17,2%. Exonération IR à 22 ans, PS à 30 ans de détention. Le tableau détaille chaque étape ; dans l'export Excel, la colonne Montant contient des formules vivantes."
     };
   },
 
