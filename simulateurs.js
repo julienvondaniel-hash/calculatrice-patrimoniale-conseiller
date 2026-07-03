@@ -168,7 +168,10 @@
           if (t.xl.sum) {
             const n = t.xl.data.length;
             let c = cT('Σ', 'sTotL');
-            for (let ci = 1; ci < span; ci++) c += cF('=SUM(R[-' + n + ']C:R[-1]C)', 0, 'sTot');
+            for (let ci = 1; ci < span; ci++) {
+              const colSum = t.xl.data.reduce((s, d) => s + (typeof d[ci] === 'number' ? d[ci] : 0), 0);
+              c += cF('=SUM(R[-' + n + ']C:R[-1]C)', colSum, 'sTot');   // valeur en cache = somme réelle (plus de 0 en dur)
+            }
             B += Row(c);
           }
           (t.xl.extra || []).forEach(ex => {
@@ -310,6 +313,7 @@
     if (pv <= 260000) return 0.06 * pv - (260000 - pv) * 0.25;
     return 0.06 * pv;
   }
+  // emolumentsNotaireHT() et computeFraisNotaire() sont définis globalement dans app.js (source unique, partagée).
 
   /* ---------- rendu : carte graphique + bloc résultat ---------- */
   function simRender(sheet, res) {
@@ -550,7 +554,16 @@
       const v = el('div', {}); v.append(hero('SIMULATEUR', 'Acheter vs Louer', SW));
       const sheet = el('div', { class: 'sheet' });
       sheet.append(field('Prix du bien', moneyInput('a-prix', '300000')));
-      sheet.append(field('Frais de notaire', pctInput('a-notaire', '8')));
+      const aTB = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Type de bien')]);
+      aTB.append(selectField('a-tb', [['ancien', 'Ancien'], ['neuf', 'Neuf / VEFA']], 'ancien'));
+      sheet.append(aTB);
+      const aTBsel = aTB.querySelector('select');
+      const aDmtoWrap = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Taux départemental (DMTO)')]);
+      aDmtoWrap.append(selectField('a-dmto', [['6.3113', '6,31 % (droit commun)'], ['5.8106', '5,81 %'], ['5.09', '5,09 %']], '6.3113'));
+      sheet.append(aDmtoWrap);
+      sheet.append(field('Débours notaire', moneyInput('a-deb', '1200'), 'Frais de notaire calculés automatiquement (émoluments + droits + CSI + débours).'));
+      const aSyncDmto = () => { aDmtoWrap.style.display = aTBsel.value === 'neuf' ? 'none' : ''; };
+      aTBsel.addEventListener('change', aSyncDmto); aSyncDmto();
       sheet.append(field('Apport personnel', moneyInput('a-apport', '60000')));
       sheet.append(field('Taux du crédit', pctInput('a-taux', '3')));
       sheet.append(field('Durée du crédit', stepper('a-duree', 20, 1, 40)));
@@ -562,10 +575,10 @@
       sheet.append(field('Flat tax sur plus-values', pctInput('a-flat', '30')));
       sheet.append(field('Horizon d\'analyse', stepper('a-hor', 25, 1, 40)));
       sheet.append(actions(() => {
-        const P = gv('a-prix'), notaire = gv('a-notaire') / 100, apport = gv('a-apport'), taux = gv('a-taux') / 100;
+        const P = gv('a-prix'), apport = gv('a-apport'), taux = gv('a-taux') / 100;
         const duree = Math.max(1, Math.round(gv('a-duree'))), chargesPct = gv('a-charges') / 100, reval = gv('a-reval') / 100;
         const loyerPct = gv('a-loyer') / 100, irl = gv('a-irl') / 100, rdtP = gv('a-place') / 100, flat = gv('a-flat') / 100, horizon = Math.max(1, Math.round(gv('a-hor')));
-        const F = P * notaire, loan = Math.max(0, P + F - apport), creditM = duree * 12, rM = taux / 12;
+        const F = computeFraisNotaire(P, gvSel('a-tb'), parseFloat(gvSel('a-dmto')), gv('a-deb')), loan = Math.max(0, P + F - apport), creditM = duree * 12, rM = taux / 12;
         const pmtM = rM === 0 ? loan / creditM : loan * rM / (1 - Math.pow(1 + rM, -creditM)), rPM = rdtP / 12;
         let bal = loan, renter = apport, renterC = apport; const bW = [P - loan], rW = [apport]; let cross = null;
         const detail = []; let payY = 0, chY = 0, rentY = 0;
@@ -706,14 +719,28 @@
       regSelect = cR.querySelector('select');
     }
     sheet.append(field('Prix du bien (hors frais)', moneyInput(pfx + '-prix', compare ? '600000' : '300000')));
-    sheet.append(field('Frais d\'acquisition / notaire', pctInput(pfx + '-not', '7,5'), 'Ajoutés au prix ; ≈ 7–8 % ancien, 2–3 % neuf. Ne produisent pas de loyer et majorent le prix d\'acquisition pour la plus-value.'));
+    const cTB = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Type de bien')]);
+    cTB.append(selectField(pfx + '-tb', [['ancien', 'Ancien'], ['neuf', 'Neuf / VEFA']], 'ancien'));
+    sheet.append(cTB);
+    const tbSelect = cTB.querySelector('select');
+    const dmtoWrap = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Taux départemental (DMTO)')]);
+    dmtoWrap.append(selectField(pfx + '-dmto', [['6.3113', '6,31 % (droit commun)'], ['5.8106', '5,81 %'], ['5.09', '5,09 %']], '6.3113'));
+    sheet.append(dmtoWrap);
+    sheet.append(field('Débours notaire', moneyInput(pfx + '-deb', '1200'), 'Frais annexes (état hypothécaire, formalités…). Les frais de notaire sont calculés automatiquement à partir du prix, du type de bien et du taux départemental.'));
+    if (tbSelect) {
+      const syncDmto = () => { dmtoWrap.style.display = tbSelect.value === 'neuf' ? 'none' : ''; };
+      tbSelect.addEventListener('change', syncDmto); syncDmto();
+    }
     sheet.append(field('Rendement locatif brut', pctInput(pfx + '-rdt', compare ? '8' : '3,5'), 'Loyer annuel ÷ prix hors frais.'));
     sheet.append(field('Vacance & impayés (% du loyer)', pctInput(pfx + '-vac', '5'), 'Réduit le loyer encaissé et déclaré (≈ 1 mois/an = 8 %).'));
     sheet.append(field('Indexation du loyer (IRL)', pctInput(pfx + '-irl', '1')));
     sheet.append(field('Revalorisation du bien / an', pctInput(pfx + '-reval', '1')));
     sheet.append(field('Capital emprunté', moneyInput(pfx + '-emp', compare ? '550000' : '300000')));
     sheet.append(field('Taux d\'emprunt', pctInput(pfx + '-taux', compare ? '3' : '2')));
-    sheet.append(field('Assurance emprunteur (ADI)', pctInput(pfx + '-adi', '0,3'), 'Par an, sur le capital emprunté ; intégrée au coût du crédit et déductible.'));
+    sheet.append(field('Assurance emprunteur (ADI)', pctInput(pfx + '-adi', '0,34'), 'Par an ; intégrée au coût du crédit et déductible en régime réel.'));
+    const cMA = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Base de l\'assurance emprunteur')]);
+    cMA.append(selectField(pfx + '-adimode', [['initial', 'Capital initial (prime constante)'], ['crd', 'Capital restant dû (prime dégressive)']], 'initial'));
+    sheet.append(cMA);
     sheet.append(field('Durée du crédit', stepper(pfx + '-dc', 20, 1, 40)));
     sheet.append(field('Durée de détention', stepper(pfx + '-hold', 20, 1, 40)));
     sheet.append(field('Taxe foncière annuelle', moneyInput(pfx + '-tf', compare ? '4000' : '875')));
@@ -736,7 +763,8 @@
         emp: gv(pfx + '-emp'), taux: gv(pfx + '-taux') / 100, dc: Math.max(1, Math.round(gv(pfx + '-dc'))), hold: Math.max(1, Math.round(gv(pfx + '-hold'))),
         tf: gv(pfx + '-tf'), gest: gv(pfx + '-gest') / 100, trav: gv(pfx + '-trav') / 100, pno: gv(pfx + '-pno'),
         tmi: gv(pfx + '-tmi') / 100, ps: gv(pfx + '-ps') / 100, amDuree: Math.max(1, Math.round(gv(pfx + '-am'))),
-        notaire: gv(pfx + '-not') / 100, adi: gv(pfx + '-adi') / 100, vac: gv(pfx + '-vac') / 100
+        typeBien: gvSel(pfx + '-tb'), tauxDMTO: parseFloat(gvSel(pfx + '-dmto')), debours: gv(pfx + '-deb'),
+        adi: gv(pfx + '-adi') / 100, adiMode: gvSel(pfx + '-adimode'), vac: gv(pfx + '-vac') / 100
       };
       if (!compare) {
         const reg = gvSel(pfx + '-reg'), R = immoScenario(P, reg, P.hold);
@@ -747,6 +775,8 @@
           title: 'Résultats',
           exportTables: immoExportTables(R),
           rows: [
+            ['Frais d\'acquisition (notaire)', e0(R.frais) + '  (' + p2(R.frais / P.prix * 100) + ')'],
+            ['Apport initial (frais inclus)', e0(R.apport)],
             ['TRI du projet', R.tri === null ? 'n/a' : p2(R.tri * 100)],
             ['TRI si revalorisation ±1 %/an', fp(triLow) + '  …  ' + fp(triHigh)],
             ['Effort d\'épargne moyen', eMo(R.effort)],
@@ -782,7 +812,7 @@
 
   /* ---------- moteur immobilier (un régime, durée variable) ---------- */
   function immoScenario(P, regime, holdY) {
-    const fraisNotaire = P.prix * (P.notaire || 0), coutTotal = P.prix + fraisNotaire;
+    const frais = computeFraisNotaire(P.prix, P.typeBien, P.tauxDMTO, P.debours), coutTotal = P.prix + frais;
     const loyerBase = P.prix * P.rdt * (1 - (P.vac || 0));
     const rM = P.taux / 12, nM = P.dc * 12;
     const pmtM = rM === 0 ? P.emp / nM : P.emp * rM / (1 - Math.pow(1 + rM, -nM)), annuite = pmtM * 12;
@@ -791,7 +821,9 @@
     const yint = y => { let s = 0; for (let m = (y - 1) * 12; m < y * 12 && m < nM; m++) s += intM[m]; return s; };
     const crd = y => { const idx = Math.min(y * 12, nM) - 1; return idx >= 0 ? balM[idx] : P.emp; };
     const loyerY = y => loyerBase * Math.pow(1 + P.irl, y - 1);
-    const chExplY = y => { const lo = loyerY(y), adi = (y <= P.dc ? P.emp * (P.adi || 0) : 0); return P.tf * Math.pow(1.01, y - 1) + P.pno * Math.pow(1.01, y - 1) + lo * (P.gest + P.trav) + adi; };
+    // Prime d'assurance emprunteur : sur capital initial (constante) ou capital restant dû en début d'année (dégressive)
+    const primeADI = y => { if (y > P.dc) return 0; const base = P.adiMode === 'crd' ? (y <= 1 ? P.emp : crd(y - 1)) : P.emp; return base * (P.adi || 0); };
+    const chExplY = y => { const lo = loyerY(y); return P.tf * Math.pow(1.01, y - 1) + P.pno * Math.pow(1.01, y - 1) + lo * (P.gest + P.trav) + primeADI(y); };
     const amImmo = coutTotal * 0.8 / P.amDuree, isSeuil = 42500, isReduit = 0.15, isTaux = 0.25;
     const isOn = x => x <= 0 ? 0 : Math.min(x, isSeuil) * isReduit + Math.max(x - isSeuil, 0) * isTaux;
     let stock = 0, cumAm = 0, cumAmLoc = 0, amStock = 0, deficitRep = 0;
@@ -868,7 +900,7 @@
       cf.push(net);
     }
     const amortRows = []; { let cdeb = P.emp; for (let y = 1; y <= P.dc; y++) { const it = yint(y), cfin = crd(y), cr = cdeb - cfin; amortRows.push([y, cdeb, cr + it, it, cr, cfin]); cdeb = cfin; } }
-    return { tri: irr(cf), effort: somE / holdY / 12, saleNet, gainBrut, pvTax, gainNet: cf.reduce((a, c) => a + c, 0), sv: svFinal, crd: crdFinal, fiscalRows, cashRows, amortRows };
+    return { tri: irr(cf), effort: somE / holdY / 12, saleNet, gainBrut, pvTax, gainNet: cf.reduce((a, c) => a + c, 0), sv: svFinal, crd: crdFinal, frais, apport, fiscalRows, cashRows, amortRows };
   }
 
   /* -------- Écran : Profil conseiller -------- */
