@@ -558,10 +558,10 @@
       aTB.append(selectField('a-tb', [['ancien', 'Ancien'], ['neuf', 'Neuf / VEFA']], 'ancien'));
       sheet.append(aTB);
       const aTBsel = aTB.querySelector('select');
-      const aDmtoWrap = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Taux départemental (DMTO)')]);
-      aDmtoWrap.append(selectField('a-dmto', [['6.3113', '6,31 % (droit commun)'], ['5.8106', '5,81 %'], ['5.09', '5,09 %']], '6.3113'));
+      const aDmtoWrap = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Département (droits de mutation)')]);
+      aDmtoWrap.append(selectField('a-dep', dmtoDeptOptions(), '75'));
       sheet.append(aDmtoWrap);
-      sheet.append(field('Débours notaire', moneyInput('a-deb', '1200'), 'Frais de notaire calculés automatiquement (émoluments + droits + CSI + débours).'));
+      sheet.append(field('Débours notaire', moneyInput('a-deb', '1200'), 'Frais de notaire calculés automatiquement : émoluments + droits de mutation du département + CSI + débours.'));
       const aSyncDmto = () => { aDmtoWrap.style.display = aTBsel.value === 'neuf' ? 'none' : ''; };
       aTBsel.addEventListener('change', aSyncDmto); aSyncDmto();
       sheet.append(field('Apport personnel', moneyInput('a-apport', '60000')));
@@ -578,7 +578,7 @@
         const P = gv('a-prix'), apport = gv('a-apport'), taux = gv('a-taux') / 100;
         const duree = Math.max(1, Math.round(gv('a-duree'))), chargesPct = gv('a-charges') / 100, reval = gv('a-reval') / 100;
         const loyerPct = gv('a-loyer') / 100, irl = gv('a-irl') / 100, rdtP = gv('a-place') / 100, flat = gv('a-flat') / 100, horizon = Math.max(1, Math.round(gv('a-hor')));
-        const F = computeFraisNotaire(P, gvSel('a-tb'), parseFloat(gvSel('a-dmto')), gv('a-deb')), loan = Math.max(0, P + F - apport), creditM = duree * 12, rM = taux / 12;
+        const F = computeFraisNotaire(P, gvSel('a-tb'), dmtoDeptRate(gvSel('a-dep')) * 100, gv('a-deb')), loan = Math.max(0, P + F - apport), creditM = duree * 12, rM = taux / 12;
         const pmtM = rM === 0 ? loan / creditM : loan * rM / (1 - Math.pow(1 + rM, -creditM)), rPM = rdtP / 12;
         let bal = loan, renter = apport, renterC = apport; const bW = [P - loan], rW = [apport]; let cross = null;
         const detail = []; let payY = 0, chY = 0, rentY = 0;
