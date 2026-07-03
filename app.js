@@ -744,13 +744,15 @@ Object.assign(Calc, {
   },
 
   /* ---- Frais de notaire / d'acquisition (émoluments + droits + CSI + débours) ---- */
-  dmtoAchat({ departement, valeur, typeBien, debours }) {
-    const tauxDept = DMTO_DEPTS[departement] ?? 0.0581;   // droits d'enregistrement globaux (départemental + communal + assiette)
+  dmtoAchat({ departement, valeur, typeBien, debours, tauxPerso }) {
+    const tauxDept = (tauxPerso > 0) ? tauxPerso / 100 : dmtoDeptRate(departement);   // taux global (dép. + communal + assiette)
     const d = fraisAcquisitionDetail(valeur, typeBien, tauxDept * 100, debours);
     const neuf = typeBien === 'neuf';
+    const nomDept = (DMTO_DEPARTEMENTS.find(x => x[0] === departement) || [departement, ''])[1];
     return {
       rows: [
         ['Type de bien', neuf ? 'Neuf / VEFA' : 'Ancien'],
+        neuf ? null : ['Département', departement + (nomDept ? ' ' + nomDept : '')],
         ['Valeur d\'acquisition hors frais', eur(valeur)],
         neuf ? ['Taxe de publicité foncière (0,715 %)', eur(d.droits)]
              : ['Droits de mutation (' + pct(tauxDept * 100) + ')', eur(d.droits)],
@@ -758,9 +760,9 @@ Object.assign(Calc, {
         ['Contribution de sécurité immobilière (0,10 %)', eur(d.csi)],
         ['Débours', eur(d.debours)],
         ['Soit, en % du prix', pct(d.total / valeur * 100)],
-      ],
+      ].filter(Boolean),
       total: ['Frais d\'acquisition totaux', eur(d.total)],
-      note: "Émoluments réglementés (barème par tranches, TVA 20 %) + droits de mutation (ancien) ou TPF réduite 0,715 % (neuf/VEFA) + CSI + débours. Estimation, hors cas particuliers (primo-accédant, prêts aidés, mobilier déductible…)."
+      note: "Émoluments réglementés (barème par tranches, TVA 20 %) + droits de mutation (ancien, taux global du département : part départementale + 1,20 % communal + frais d'assiette) ou TPF réduite 0,715 % (neuf/VEFA) + CSI + débours. Taux DGFiP au barème 2026 (mesure 2025–2028) ; primo-accédants exonérés de la hausse (saisir un taux personnalisé). Estimation hors mobilier déductible et cas particuliers."
     };
   },
 
@@ -896,9 +898,48 @@ function baremeDMTG(taxable, lien) {
 }
 
 /* Taux DMTO par département (la plupart à 5,81% ; quelques exceptions historiques à 5,11%) */
-const DMTO_DEPTS = {
-  '36 Indre': 0.0511, '38 Isère': 0.0511, '56 Morbihan': 0.0581, '75 Paris': 0.0581,
-};
+/* Barème DMTO 2026 (source DGFiP, mesure exceptionnelle 2025–2028).
+   Taux global = part départementale + taxe communale 1,20 % + frais d'assiette (2,37 % de la part dép.).
+   Majorité des départements à 6,32 % (part dép. relevée à 5,00 %). Restés à 5,81 % (4,50 %) ou 5,09 % (3,80 %).
+   Les primo-accédants (résidence principale) sont exonérés de la hausse — utiliser le taux personnalisé le cas échéant. */
+const DMTO_RATE_RAISED = 0.063185;   // 6,32 %
+const DMTO_RATE_KEPT = 0.058067;     // 5,81 %
+const DMTO_RATE_REDUCED = 0.050901;  // 5,09 %
+const DMTO_DEPTS_KEPT = ['01', '03', '04', '26', '27', '40', '48', '56', '60', '71', '90'];
+const DMTO_DEPTS_REDUCED = ['36', '976'];
+const DMTO_DEPARTEMENTS = [
+  ['01', 'Ain'], ['02', 'Aisne'], ['03', 'Allier'], ['04', 'Alpes-de-Haute-Provence'], ['05', 'Hautes-Alpes'],
+  ['06', 'Alpes-Maritimes'], ['07', 'Ardèche'], ['08', 'Ardennes'], ['09', 'Ariège'], ['10', 'Aube'],
+  ['11', 'Aude'], ['12', 'Aveyron'], ['13', 'Bouches-du-Rhône'], ['14', 'Calvados'], ['15', 'Cantal'],
+  ['16', 'Charente'], ['17', 'Charente-Maritime'], ['18', 'Cher'], ['19', 'Corrèze'], ['2A', 'Corse-du-Sud'],
+  ['2B', 'Haute-Corse'], ['21', 'Côte-d\'Or'], ['22', 'Côtes-d\'Armor'], ['23', 'Creuse'], ['24', 'Dordogne'],
+  ['25', 'Doubs'], ['26', 'Drôme'], ['27', 'Eure'], ['28', 'Eure-et-Loir'], ['29', 'Finistère'],
+  ['30', 'Gard'], ['31', 'Haute-Garonne'], ['32', 'Gers'], ['33', 'Gironde'], ['34', 'Hérault'],
+  ['35', 'Ille-et-Vilaine'], ['36', 'Indre'], ['37', 'Indre-et-Loire'], ['38', 'Isère'], ['39', 'Jura'],
+  ['40', 'Landes'], ['41', 'Loir-et-Cher'], ['42', 'Loire'], ['43', 'Haute-Loire'], ['44', 'Loire-Atlantique'],
+  ['45', 'Loiret'], ['46', 'Lot'], ['47', 'Lot-et-Garonne'], ['48', 'Lozère'], ['49', 'Maine-et-Loire'],
+  ['50', 'Manche'], ['51', 'Marne'], ['52', 'Haute-Marne'], ['53', 'Mayenne'], ['54', 'Meurthe-et-Moselle'],
+  ['55', 'Meuse'], ['56', 'Morbihan'], ['57', 'Moselle'], ['58', 'Nièvre'], ['59', 'Nord'],
+  ['60', 'Oise'], ['61', 'Orne'], ['62', 'Pas-de-Calais'], ['63', 'Puy-de-Dôme'], ['64', 'Pyrénées-Atlantiques'],
+  ['65', 'Hautes-Pyrénées'], ['66', 'Pyrénées-Orientales'], ['67', 'Bas-Rhin'], ['68', 'Haut-Rhin'], ['69', 'Rhône'],
+  ['70', 'Haute-Saône'], ['71', 'Saône-et-Loire'], ['72', 'Sarthe'], ['73', 'Savoie'], ['74', 'Haute-Savoie'],
+  ['75', 'Paris'], ['76', 'Seine-Maritime'], ['77', 'Seine-et-Marne'], ['78', 'Yvelines'], ['79', 'Deux-Sèvres'],
+  ['80', 'Somme'], ['81', 'Tarn'], ['82', 'Tarn-et-Garonne'], ['83', 'Var'], ['84', 'Vaucluse'],
+  ['85', 'Vendée'], ['86', 'Vienne'], ['87', 'Haute-Vienne'], ['88', 'Vosges'], ['89', 'Yonne'],
+  ['90', 'Territoire de Belfort'], ['91', 'Essonne'], ['92', 'Hauts-de-Seine'], ['93', 'Seine-Saint-Denis'], ['94', 'Val-de-Marne'],
+  ['95', 'Val-d\'Oise'], ['971', 'Guadeloupe'], ['972', 'Martinique'], ['973', 'Guyane'], ['974', 'La Réunion'],
+  ['976', 'Mayotte'],
+];
+// Taux global DMTO (fraction) pour un code département
+function dmtoDeptRate(code) {
+  if (DMTO_DEPTS_REDUCED.includes(code)) return DMTO_RATE_REDUCED;
+  if (DMTO_DEPTS_KEPT.includes(code)) return DMTO_RATE_KEPT;
+  return DMTO_RATE_RAISED;
+}
+// Options [value,label] pour un <select> de département, taux affiché
+function dmtoDeptOptions() {
+  return DMTO_DEPARTEMENTS.map(([c, n]) => [c, c + ' — ' + n + ' (' + pct(dmtoDeptRate(c) * 100) + ')']);
+}
 
 /* ---- Frais d'acquisition / notaire (fonctions globales, partagées avec simulateurs.js) ---- */
 // Émoluments du notaire (barème réglementé, tranches HT) — arrêté tarifaire
@@ -1486,15 +1527,15 @@ const Screens = {
     cTB.append(selectField('c-tb', [['ancien', 'Ancien'], ['neuf', 'Neuf / VEFA']], 'ancien'));
     sheet.append(cTB);
     const cDep = el('div', { class: 'card' }, [el('label', { class: 'field-label center' }, 'Département (droits de mutation)')]);
-    const depts = Object.keys(DMTO_DEPTS).concat(['Autre département']);
-    cDep.append(selectField('c-dep', depts.map(d => [d, d]), '56 Morbihan'));
+    cDep.append(selectField('c-dep', dmtoDeptOptions(), '75'));
     sheet.append(cDep);
     const tbSel = cTB.querySelector('select');
     const syncDep = () => { cDep.style.display = tbSel.value === 'neuf' ? 'none' : ''; };
     tbSel.addEventListener('change', syncDep); syncDep();
     sheet.append(field('Valeur acquisition hors frais', moneyInput('c-val')));
     sheet.append(field('Débours notaire', moneyInput('c-deb', '1200')));
-    sheet.append(actions(() => renderResult(sheet, Calc.dmtoAchat({ departement: $('#c-dep').value, valeur: num($('#c-val').value), typeBien: $('#c-tb').value, debours: num($('#c-deb').value) }))));
+    sheet.append(field('Taux DMTO personnalisé', pctInput('c-tauxperso', '0'), 'Optionnel : 0 = taux du département. À utiliser pour un primo-accédant exonéré ou un taux spécifique.'));
+    sheet.append(actions(() => renderResult(sheet, Calc.dmtoAchat({ departement: $('#c-dep').value, valeur: num($('#c-val').value), typeBien: $('#c-tb').value, debours: num($('#c-deb').value), tauxPerso: num($('#c-tauxperso').value) }))));
     v.append(sheet); return v;
   },
   i_ifi() {
