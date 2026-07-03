@@ -260,6 +260,10 @@
     table.pr-year td{padding:3px 4px;border-bottom:1px solid #EDEEF4;text-align:right}
     table.pr-year td:first-child{text-align:center;color:#8A8FB0}
     table.pr-year tr:nth-child(even) td{background:#F7F8FC}
+    /* cascade de calcul (plus-value) : libellé et colonne « Calcul » alignés à gauche */
+    table.pr-year.casc th{background:#4338CA}
+    table.pr-year.casc th:first-child,table.pr-year.casc td:first-child{text-align:left;color:#23263A}
+    table.pr-year.casc th:last-child,table.pr-year.casc td:last-child{text-align:left;color:#8A8FB0}
     .pr-note{margin-top:16px;font-size:10.5px;color:#8A8FB0;line-height:1.5}
     .pr-foot{margin-top:22px;border-top:1px solid #E3E5F0;padding-top:8px;font-size:10px;color:#AAB0CE;display:flex;justify-content:space-between}
   }
