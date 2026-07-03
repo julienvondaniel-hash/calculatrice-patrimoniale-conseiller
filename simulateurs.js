@@ -159,8 +159,10 @@
           t.xl.data.forEach(d => {
             let c = '';
             d.forEach((v, ci) => {
-              if (ci === 0) c += cT(String(v), 'sCenter');
+              if (v && typeof v === 'object' && v.f != null) c += cF(v.f, v.v, v.s || 'sNum');   // formule propre à la cellule
               else if (t.xl.fcol && t.xl.fcol[ci]) c += cF(t.xl.fcol[ci], v, 'sNum');
+              else if (ci === 0) c += cT(String(v), 'sLabel');
+              else if (typeof v === 'string') c += cT(v, 'sMuted');                                // colonne texte (ex. « Calcul »)
               else c += cN(v, 'sNum');
             });
             B += Row(c);
