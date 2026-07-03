@@ -743,19 +743,24 @@ Object.assign(Calc, {
     };
   },
 
-  /* ---- DMTO Achat (droits de mutation à titre onéreux) ---- */
-  dmtoAchat({ departement, valeur }) {
-    // Taux global 2025 : 5,80% dans la plupart des départements (relevé du plafond à 5%->5,5% +taxe communale 1,2% + frais d'assiette)
-    const taux = DMTO_DEPTS[departement] ?? 0.0581;
-    const droits = valeur * taux;
+  /* ---- Frais de notaire / d'acquisition (émoluments + droits + CSI + débours) ---- */
+  dmtoAchat({ departement, valeur, typeBien, debours }) {
+    const tauxDept = DMTO_DEPTS[departement] ?? 0.0581;   // droits d'enregistrement globaux (départemental + communal + assiette)
+    const d = fraisAcquisitionDetail(valeur, typeBien, tauxDept * 100, debours);
+    const neuf = typeBien === 'neuf';
     return {
       rows: [
-        ['Département', departement],
+        ['Type de bien', neuf ? 'Neuf / VEFA' : 'Ancien'],
         ['Valeur d\'acquisition hors frais', eur(valeur)],
-        ['Taux global applicable', pct(taux * 100)],
+        neuf ? ['Taxe de publicité foncière (0,715 %)', eur(d.droits)]
+             : ['Droits de mutation (' + pct(tauxDept * 100) + ')', eur(d.droits)],
+        ['Émoluments du notaire TTC', eur(d.emolTTC)],
+        ['Contribution de sécurité immobilière (0,10 %)', eur(d.csi)],
+        ['Débours', eur(d.debours)],
+        ['Soit, en % du prix', pct(d.total / valeur * 100)],
       ],
-      total: ['Droits de mutation (DMTO)', eur(droits)],
-      note: "Estimation des droits d'enregistrement (hors émoluments du notaire et débours). Taux départemental + taxe communale + frais d'assiette."
+      total: ['Frais d\'acquisition totaux', eur(d.total)],
+      note: "Émoluments réglementés (barème par tranches, TVA 20 %) + droits de mutation (ancien) ou TPF réduite 0,715 % (neuf/VEFA) + CSI + débours. Estimation, hors cas particuliers (primo-accédant, prêts aidés, mobilier déductible…)."
     };
   },
 
@@ -894,6 +899,39 @@ function baremeDMTG(taxable, lien) {
 const DMTO_DEPTS = {
   '36 Indre': 0.0511, '38 Isère': 0.0511, '56 Morbihan': 0.0581, '75 Paris': 0.0581,
 };
+
+/* ---- Frais d'acquisition / notaire (fonctions globales, partagées avec simulateurs.js) ---- */
+// Émoluments du notaire (barème réglementé, tranches HT) — arrêté tarifaire
+function emolumentsNotaireHT(prix) {
+  const tranches = [
+    { plafond: 6500, taux: 0.0387 },
+    { plafond: 17000, taux: 0.0160 },
+    { plafond: 60000, taux: 0.0106 },
+    { plafond: Infinity, taux: 0.0080 },
+  ];
+  let bas = 0, emol = 0;
+  for (const t of tranches) {
+    const assiette = Math.max(0, Math.min(prix, t.plafond) - bas);
+    emol += assiette * t.taux;
+    bas = t.plafond;
+    if (prix <= t.plafond) break;
+  }
+  return emol;
+}
+// Frais d'acquisition totaux : émoluments TTC + CSI + droits (DMTO ancien / TPF réduite neuf) + débours.
+// tauxDMTO en POURCENT (ex. 5.8106). Renvoie { emolTTC, csi, droits, debours, total }.
+function fraisAcquisitionDetail(prix, typeBien, tauxDMTO, debours) {
+  const emolTTC = emolumentsNotaireHT(prix) * 1.20;                 // TVA 20 %
+  const csi = Math.max(prix * 0.001, 15);                          // contribution de sécurité immobilière 0,10 %, min 15 €
+  const droits = typeBien === 'neuf'
+    ? prix * 0.00715                                                // TPF réduite (neuf / VEFA)
+    : prix * ((tauxDMTO || 5.81) / 100);                           // DMTO (ancien)
+  const deb = debours || 0;
+  return { emolTTC, csi, droits, debours: deb, total: emolTTC + csi + droits + deb };
+}
+function computeFraisNotaire(prix, typeBien, tauxDMTO, debours) {
+  return fraisAcquisitionDetail(prix, typeBien, tauxDMTO, debours).total;
+}
 
 /* ============================================================
    COMPOSANTS UI réutilisables
@@ -1322,7 +1360,7 @@ const Screens = {
     const sheet = el('div', { class: 'sheet' });
     sheet.append(el('div', { class: 'group-label' }, 'Calculatrices'));
     [
-      ['DMTO Achat', 'i_dmto'],
+      ['Frais de notaire (acquisition)', 'i_dmto'],
       ['IFI', 'i_ifi'],
       ['Plus-values immobilières des particuliers', 'i_pvimmo'],
       ['Revenus fonciers', 'i_foncier'],
@@ -1442,14 +1480,21 @@ const Screens = {
   /* ======================= IMMOBILIER ======================= */
   i_dmto() {
     const v = el('div', {});
-    v.append(hero('IMMOBILIER', 'DMTO Achat'));
+    v.append(hero('IMMOBILIER', 'Frais de notaire'));
     const sheet = el('div', { class: 'sheet' });
-    const cDep = el('div', { class: 'card' }, [el('label', { class: 'field-label center' }, 'Département de cession')]);
+    const cTB = el('div', { class: 'card' }, [el('label', { class: 'field-label center' }, 'Type de bien')]);
+    cTB.append(selectField('c-tb', [['ancien', 'Ancien'], ['neuf', 'Neuf / VEFA']], 'ancien'));
+    sheet.append(cTB);
+    const cDep = el('div', { class: 'card' }, [el('label', { class: 'field-label center' }, 'Département (droits de mutation)')]);
     const depts = Object.keys(DMTO_DEPTS).concat(['Autre département']);
     cDep.append(selectField('c-dep', depts.map(d => [d, d]), '56 Morbihan'));
     sheet.append(cDep);
+    const tbSel = cTB.querySelector('select');
+    const syncDep = () => { cDep.style.display = tbSel.value === 'neuf' ? 'none' : ''; };
+    tbSel.addEventListener('change', syncDep); syncDep();
     sheet.append(field('Valeur acquisition hors frais', moneyInput('c-val')));
-    sheet.append(actions(() => renderResult(sheet, Calc.dmtoAchat({ departement: $('#c-dep').value, valeur: num($('#c-val').value) }))));
+    sheet.append(field('Débours notaire', moneyInput('c-deb', '1200')));
+    sheet.append(actions(() => renderResult(sheet, Calc.dmtoAchat({ departement: $('#c-dep').value, valeur: num($('#c-val').value), typeBien: $('#c-tb').value, debours: num($('#c-deb').value) }))));
     v.append(sheet); return v;
   },
   i_ifi() {
