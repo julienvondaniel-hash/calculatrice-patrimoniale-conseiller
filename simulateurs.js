@@ -768,9 +768,6 @@
       };
       if (!compare) {
         const reg = gvSel(pfx + '-reg'), R = immoScenario(P, reg, P.hold);
-        const triLow = immoScenario({ ...P, reval: P.reval - 0.01 }, reg, P.hold).tri;
-        const triHigh = immoScenario({ ...P, reval: P.reval + 0.01 }, reg, P.hold).tri;
-        const fp = t => t === null ? 'n/a' : p2(t * 100);
         simRender(sheet, {
           title: 'Résultats',
           exportTables: immoExportTables(R),
@@ -778,14 +775,13 @@
             ['Frais d\'acquisition (notaire)', e0(R.frais) + '  (' + p2(R.frais / P.prix * 100) + ')'],
             ['Apport initial (frais inclus)', e0(R.apport)],
             ['TRI du projet', R.tri === null ? 'n/a' : p2(R.tri * 100)],
-            ['TRI si revalorisation ±1 %/an', fp(triLow) + '  …  ' + fp(triHigh)],
             ['Effort d\'épargne moyen', eMo(R.effort)],
             ['Valeur nette à la revente', e0(R.saleNet)],
             ['Plus-value brute', e0(R.gainBrut)],
             ['Impôt sur la plus-value', e0(R.pvTax)],
           ],
           total: ['Gain net total', e0(R.gainNet)],
-          note: 'Frais de notaire ajoutés au prix (n\'entrent pas dans le loyer, majorent le prix d\'acquisition pour la plus-value). Loyer net de vacance/impayés et indexé IRL. Assurance emprunteur incluse dans le coût du crédit. Plus-value selon le régime, avec surtaxe au-delà de 50 000 € de PV imposable. Revalorisation déterministe : voir la sensibilité ±1 %. Indicatif, hors cas particuliers.'
+          note: 'Frais de notaire ajoutés au prix (n\'entrent pas dans le loyer, majorent le prix d\'acquisition pour la plus-value). Loyer net de vacance/impayés et indexé IRL. Assurance emprunteur incluse dans le coût du crédit. Plus-value selon le régime, avec surtaxe au-delà de 50 000 € de PV imposable. Indicatif, hors cas particuliers.'
         });
       } else {
         const IR = immoScenario(P, 'rf', P.hold), IS = immoScenario(P, 'sci_is', P.hold);
