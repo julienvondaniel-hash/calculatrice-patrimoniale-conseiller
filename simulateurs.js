@@ -10,7 +10,7 @@
   'use strict';
 
   /* ---------- formatage ---------- */
-  const e0 = n => isFinite(n) ? Math.round(n).toLocaleString('fr-FR') + ' €' : '—';
+  const e0 = n => isFinite(n) ? n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €' : '—';
   const eMo = n => e0(n) + '/mois';
   const p2 = x => isFinite(x) ? x.toFixed(2).replace('.', ',') + ' %' : '—';
   const gv = id => num($('#' + id).value);
@@ -131,8 +131,9 @@
       const p = Profile.get();
       const X = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       const cT = (t, s) => '<Cell' + (s ? ' ss:StyleID="' + s + '"' : '') + '><Data ss:Type="String">' + X(t) + '</Data></Cell>';
-      const cN = (n, s) => '<Cell' + (s ? ' ss:StyleID="' + s + '"' : '') + '><Data ss:Type="Number">' + (isFinite(n) ? Math.round(n) : 0) + '</Data></Cell>';
-      const cF = (f, n, s) => '<Cell' + (s ? ' ss:StyleID="' + s + '"' : '') + ' ss:Formula="' + X(f) + '"><Data ss:Type="Number">' + (isFinite(n) ? Math.round(n) : 0) + '</Data></Cell>';
+      const r2 = n => isFinite(n) ? Math.round(n * 100) / 100 : 0;   // 2 décimales
+      const cN = (n, s) => '<Cell' + (s ? ' ss:StyleID="' + s + '"' : '') + '><Data ss:Type="Number">' + r2(n) + '</Data></Cell>';
+      const cF = (f, n, s) => '<Cell' + (s ? ' ss:StyleID="' + s + '"' : '') + ' ss:Formula="' + X(f) + '"><Data ss:Type="Number">' + r2(n) + '</Data></Cell>';
       const Row = c => '<Row>' + c + '</Row>';
       const empty = () => '<Row/>';
       const section = (label, style, span) => '<Row><Cell ss:StyleID="' + style + '" ss:MergeAcross="' + (Math.max(1, span) - 1) + '"><Data ss:Type="String">' + X(label) + '</Data></Cell></Row>';
@@ -199,9 +200,9 @@
         + '<Style ss:ID="sFisc"><Interior ss:Color="#4338CA" ss:Pattern="Solid"/><Font ss:Bold="1" ss:Color="#FFFFFF"/></Style>'
         + '<Style ss:ID="sCash"><Interior ss:Color="#0E8F63" ss:Pattern="Solid"/><Font ss:Bold="1" ss:Color="#FFFFFF"/></Style>'
         + '<Style ss:ID="sAmort"><Interior ss:Color="#1F2547" ss:Pattern="Solid"/><Font ss:Bold="1" ss:Color="#FFFFFF"/></Style>'
-        + '<Style ss:ID="sNum"><NumberFormat ss:Format="#,##0\\ &quot;€&quot;"/><Alignment ss:Horizontal="Right"/></Style>'
-        + '<Style ss:ID="sNumB"><NumberFormat ss:Format="#,##0\\ &quot;€&quot;"/><Font ss:Bold="1"/><Alignment ss:Horizontal="Right"/></Style>'
-        + '<Style ss:ID="sTot"><NumberFormat ss:Format="#,##0\\ &quot;€&quot;"/><Font ss:Bold="1" ss:Color="#1F2547"/><Interior ss:Color="#F4F6FB" ss:Pattern="Solid"/><Alignment ss:Horizontal="Right"/></Style>'
+        + '<Style ss:ID="sNum"><NumberFormat ss:Format="#,##0.00\\ &quot;€&quot;"/><Alignment ss:Horizontal="Right"/></Style>'
+        + '<Style ss:ID="sNumB"><NumberFormat ss:Format="#,##0.00\\ &quot;€&quot;"/><Font ss:Bold="1"/><Alignment ss:Horizontal="Right"/></Style>'
+        + '<Style ss:ID="sTot"><NumberFormat ss:Format="#,##0.00\\ &quot;€&quot;"/><Font ss:Bold="1" ss:Color="#1F2547"/><Interior ss:Color="#F4F6FB" ss:Pattern="Solid"/><Alignment ss:Horizontal="Right"/></Style>'
         + '<Style ss:ID="sTotL"><Font ss:Bold="1" ss:Color="#1F2547"/><Interior ss:Color="#F4F6FB" ss:Pattern="Solid"/></Style>'
         + '</Styles>';
       const xml = '<?xml version="1.0" encoding="UTF-8"?>\n<?mso-application progid="Excel.Sheet"?>\n'
@@ -250,7 +251,7 @@
 
   // Construit les 2 tableaux annuels (fiscal + trésorerie) d'un scénario immobilier
   function immoExportTables(R, label, opts) {
-    const eN = n => e0(Math.round(n));
+    const eN = n => e0(n);
     const neg = n => Math.round(n) === 0 ? eN(0) : '− ' + eN(Math.abs(n));
     const pre = label ? label + ' — ' : '';
     const N = R.fiscalRows.length;
@@ -268,7 +269,7 @@
       title: pre + 'Trésorerie — encaissements (+) / décaissements (−)',
       head: ['An', 'Loyer (+)', 'Capital (−)', 'Intérêts (−)', 'Charges (−)', 'Impôt', 'Cash-flow'],
       rows: R.cashRows.map(d => [String(d[0]), '+ ' + eN(d[1]), neg(d[2]), neg(d[3]), neg(d[4]), (Math.round(d[5]) === 0 ? eN(0) : (d[5] > 0 ? '+ ' + eN(d[5]) : neg(d[5]))), eN(d[6])]).concat([
-        ['Revente', '+ ' + eN(R.sv), '', '', neg(R.pvTax) + ' (PV)', R.crd > 0 ? neg(R.crd) + ' (CRD)' : '', '+ ' + eN(R.saleNet)],
+        ['Revente', '+ ' + eN(R.sv), '', '', neg(R.pvTax) + ' (PV)', (R.crd > 0 ? neg(R.crd) + ' (CRD)' : '') + (R.distribApplied ? ' ' + neg(R.distribTax) + ' (PFU)' : ''), '+ ' + eN(R.saleNet)],
         ['Σ totaux', '+ ' + eN(csum(1)), neg(csum(2)), neg(csum(3)), neg(csum(4)), eN(csum(5)), eN(csum(6))],
         ['Flux net an ' + N + ' (avec revente — base du TRI)', '', '', '', '', '', eN(lastOp + R.saleNet)]
       ]),
@@ -600,7 +601,7 @@
           }
         }
         const buyerH = bW[horizon], renterH = rW[horizon], ecart = buyerH - renterH;
-        const eN = n => e0(Math.round(n)), neg = n => Math.round(n) === 0 ? eN(0) : '− ' + eN(Math.abs(n)), sgn = n => Math.round(n) === 0 ? eN(0) : (n > 0 ? '+ ' + eN(n) : neg(n));
+        const eN = n => e0(n), neg = n => Math.round(n) === 0 ? eN(0) : '− ' + eN(Math.abs(n)), sgn = n => Math.round(n) === 0 ? eN(0) : (n > 0 ? '+ ' + eN(n) : neg(n));
         const achatTables = [
           { kind: 'fisc', title: 'Patrimoine net — acheteur vs locataire',
             head: ['An', 'Valeur bien', '− CRD', 'Patrim. acheteur', 'Placement loc.', 'Patrim. locataire', 'Écart'],
@@ -716,9 +717,14 @@
     let regSelect = null;
     if (!compare) {
       const cR = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Régime fiscal')]);
-      cR.append(selectField(pfx + '-reg', [['rf', 'Revenus fonciers (réel)'], ['deficit', 'Déficit foncier'], ['lmnp', 'LMNP (amortissement)'], ['lmp', 'LMP'], ['sci_is', 'SCI à l\'IS'], ['malraux', 'Malraux'], ['mh', 'Monument historique']], 'rf'));
+      cR.append(selectField(pfx + '-reg', [['rf', 'Revenus fonciers (réel)'], ['deficit', 'Déficit foncier'], ['jeanbrun', 'Statut bailleur privé (Jeanbrun)'], ['lmnp', 'LMNP (amortissement)'], ['lmp', 'LMP'], ['sci_is', 'SCI à l\'IS'], ['malraux', 'Malraux'], ['mh', 'Monument historique']], 'rf'));
       sheet.append(cR);
       regSelect = cR.querySelector('select');
+      const cBail = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Niveau de loyer (bail Jeanbrun)')]);
+      cBail.append(selectField(pfx + '-bail', [['intermediaire', 'Intermédiaire (loyer −15 %)'], ['social', 'Social (−30 %)'], ['tres_social', 'Très social (−45 %)']], 'intermediaire'));
+      cBail.append(el('div', { class: 'hint', style: 'margin-top:10px' }, 'Loyer plafonné (décote) et amortissement du prix (80 %) selon neuf/ancien × bail ; le rendement saisi est le rendement de marché avant décote.'));
+      sheet.append(cBail);
+      regSelect.__cBail = cBail;
     }
     sheet.append(field('Prix du bien (hors frais)', moneyInput(pfx + '-prix', compare ? '600000' : '300000')));
     const cTB = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Type de bien')]);
@@ -754,8 +760,17 @@
     sheet.append(field('Prélèvements sociaux', pctInput(pfx + '-ps', compare ? '17' : '17,2')));
     const amWrap = field('Amortissement immobilier (durée) — LMNP / LMP / SCI à l\'IS', stepper(pfx + '-am', 30, 1, 50));
     sheet.append(amWrap);
+    const cDist = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Distribution du produit de cession (SCI à l\'IS)')]);
+    cDist.append(selectField(pfx + '-distrib', [['oui', 'Distribué à l\'associé (PFU 31,4 %)'], ['non', 'Conservé dans la société']], 'oui'));
+    cDist.append(el('div', { class: 'hint', style: 'margin-top:10px' }, '2e étage d\'imposition : après l\'IS sur la plus-value, le boni distribué à l\'associé supporte le PFU (flat tax) de 31,4 %.'));
+    sheet.append(cDist);
     if (regSelect) {
-      const syncAm = () => { const r = regSelect.value; amWrap.style.display = (r === 'lmnp' || r === 'lmp' || r === 'sci_is') ? '' : 'none'; };
+      const syncAm = () => {
+        const r = regSelect.value, jb = (r === 'jeanbrun');
+        amWrap.style.display = (r === 'lmnp' || r === 'lmp' || r === 'sci_is') ? '' : 'none';   // Jeanbrun : amortissement automatique
+        cDist.style.display = (r === 'sci_is') ? '' : 'none';
+        if (regSelect.__cBail) regSelect.__cBail.style.display = jb ? '' : 'none';
+      };
       regSelect.addEventListener('change', syncAm); syncAm();
     }
 
@@ -766,42 +781,62 @@
         tf: gv(pfx + '-tf'), gest: gv(pfx + '-gest') / 100, trav: gv(pfx + '-trav') / 100, pno: gv(pfx + '-pno'),
         tmi: gv(pfx + '-tmi') / 100, ps: gv(pfx + '-ps') / 100, amDuree: Math.max(1, Math.round(gv(pfx + '-am'))),
         typeBien: gvSel(pfx + '-tb'), tauxDMTO: parseFloat(gvSel(pfx + '-dmto')), debours: gv(pfx + '-deb'),
-        adi: gv(pfx + '-adi') / 100, adiMode: gvSel(pfx + '-adimode'), vac: gv(pfx + '-vac') / 100
+        adi: gv(pfx + '-adi') / 100, adiMode: gvSel(pfx + '-adimode'), vac: gv(pfx + '-vac') / 100,
+        distributionCession: gvSel(pfx + '-distrib'), bail: compare ? 'intermediaire' : gvSel(pfx + '-bail')
       };
       if (!compare) {
         const reg = gvSel(pfx + '-reg'), R = immoScenario(P, reg, P.hold);
+        const isSci = reg === 'sci_is', isJb = reg === 'jeanbrun';
+        const rows = [
+          ['Frais d\'acquisition (notaire)', e0(R.frais) + '  (' + p2(R.frais / P.prix * 100) + ')'],
+          ['Apport initial (frais inclus)', e0(R.apport)],
+          ['TRI du projet', R.tri === null ? 'n/a' : p2(R.tri * 100)],
+          ['Effort d\'épargne moyen', eMo(R.effort)],
+          ['Plus-value brute', e0(R.gainBrut)],
+          ['Impôt sur la plus-value' + (isSci ? ' (IS)' : ''), e0(R.pvTax)],
+        ];
+        if (isJb) rows.splice(2, 0, ['Amortissement Jeanbrun / an', e0(Math.min(0.8 * P.prix * (JB_DICT[(P.typeBien === 'neuf' ? 'neuf' : 'ancien') + '-' + (P.bail || 'intermediaire')] || JB_DICT['ancien-intermediaire']).taux, (JB_DICT[(P.typeBien === 'neuf' ? 'neuf' : 'ancien') + '-' + (P.bail || 'intermediaire')] || JB_DICT['ancien-intermediaire']).plafond))]);
+        if (isSci) {
+          rows.push(['Boni distribuable (après IS)', e0(R.boniDistrib)]);
+          rows.push(R.distribApplied
+            ? ['Impôt de distribution (PFU 31,4 %)', e0(R.distribTax)]
+            : ['Distribution du produit de cession', 'Non distribué']);
+        }
+        rows.push(['Valeur nette à la revente', e0(R.saleNet)]);
+        let note = 'Frais de notaire ajoutés au prix (n\'entrent pas dans le loyer, majorent le prix d\'acquisition pour la plus-value). Loyer net de vacance/impayés et indexé IRL. Assurance emprunteur incluse dans le coût du crédit. Plus-value selon le régime, avec surtaxe au-delà de 50 000 € de PV imposable. Indicatif, hors cas particuliers.';
+        if (isSci && !R.distribApplied) note = '⚠️ Produit de cession conservé dans la société, non disponible pour l\'associé sans imposition supplémentaire (PFU 31,4 %). ' + note;
+        if (isJb) note = 'Statut du bailleur privé (Jeanbrun) : location nue, résidence principale, engagement 9 ans. Loyer plafonné (décote de bail) — le rendement saisi est le rendement de marché avant décote. Amortissement du prix (80 %) déductible, déficit foncier (part hors intérêts imputable ≤ 10 700 €/an), amortissements réintégrés dans la plus-value. Non cumulable Pinel/Denormandie/Malraux. Paramètres 2026 indicatifs. ' + note;
         simRender(sheet, {
           title: 'Résultats',
           exportTables: immoExportTables(R),
-          rows: [
-            ['Frais d\'acquisition (notaire)', e0(R.frais) + '  (' + p2(R.frais / P.prix * 100) + ')'],
-            ['Apport initial (frais inclus)', e0(R.apport)],
-            ['TRI du projet', R.tri === null ? 'n/a' : p2(R.tri * 100)],
-            ['Effort d\'épargne moyen', eMo(R.effort)],
-            ['Valeur nette à la revente', e0(R.saleNet)],
-            ['Plus-value brute', e0(R.gainBrut)],
-            ['Impôt sur la plus-value', e0(R.pvTax)],
-          ],
+          rows: rows,
           total: ['Gain net total', e0(R.gainNet)],
-          note: 'Frais de notaire ajoutés au prix (n\'entrent pas dans le loyer, majorent le prix d\'acquisition pour la plus-value). Loyer net de vacance/impayés et indexé IRL. Assurance emprunteur incluse dans le coût du crédit. Plus-value selon le régime, avec surtaxe au-delà de 50 000 € de PV imposable. Indicatif, hors cas particuliers.'
+          note: note
         });
       } else {
         const IR = immoScenario(P, 'rf', P.hold), IS = immoScenario(P, 'sci_is', P.hold);
         const maxY = Math.min(30, Math.max(P.hold, P.dc + 5, 20)); const tIR = [], tIS = [];
         for (let y = 1; y <= maxY; y++) { tIR.push((immoScenario(P, 'rf', y).tri || 0) * 100); tIS.push((immoScenario(P, 'sci_is', y).tri || 0) * 100); }
+        // 'Régime le plus favorable' évalué APRÈS le 2e étage (distribution PFU) : gainNet inclut déjà la distribution
         const better = IS.gainNet >= IR.gainNet ? 'IS' : 'IR';
+        const rows = [
+          ['TRI (IR / IS)', (IR.tri === null ? 'n/a' : p2(IR.tri * 100)) + '  /  ' + (IS.tri === null ? 'n/a' : p2(IS.tri * 100))],
+          ['Effort mensuel (IR / IS)', e0(IR.effort) + ' / ' + e0(IS.effort)],
+          ['Valeur revente (IR / IS)', e0(IR.saleNet) + ' / ' + e0(IS.saleNet)],
+          IS.distribApplied
+            ? ['dont distribution IS (PFU 31,4 %)', '− ' + e0(IS.distribTax)]
+            : ['Distribution du produit IS', 'Non distribué'],
+          ['Gain net (IR / IS)', e0(IR.gainNet) + ' / ' + e0(IS.gainNet)],
+        ];
+        let note = 'IR : résultat foncier × (TMI+PS), plus-value particuliers. IS : amortissement, IS 15/25 %, plus-value sur valeur nette comptable, puis distribution du produit de cession à l\'associé (PFU 31,4 %). Indicatif.';
+        if (!IS.distribApplied) note = '⚠️ Comparaison non homogène : le produit de cession IS est conservé dans la société, non disponible pour l\'associé sans imposition supplémentaire (PFU 31,4 %). Le gain net IS affiché est une valeur bloquée en société, pas du cash disponible. ' + note;
         simRender(sheet, {
           title: 'Comparaison (IR / IS)',
           exportTables: immoExportTables(IR, 'SCI à l\'IR').concat(immoExportTables(IS, 'SCI à l\'IS', { noAmort: true })),
           charts: [{ title: 'TRI selon l\'année de cession', draw: cv => lineChart(cv, { n: maxY + 1, x0: 1, marker: P.hold, zero: false, euro: false, series: [{ data: [0].concat(tIR), color: '#262A41' }, { data: [0].concat(tIS), color: '#C9A24B' }] }), legend: '— SCI à l\'IR · — SCI à l\'IS · - - détention retenue' }],
-          rows: [
-            ['TRI (IR / IS)', (IR.tri === null ? 'n/a' : p2(IR.tri * 100)) + '  /  ' + (IS.tri === null ? 'n/a' : p2(IS.tri * 100))],
-            ['Effort mensuel (IR / IS)', e0(IR.effort) + ' / ' + e0(IS.effort)],
-            ['Valeur revente (IR / IS)', e0(IR.saleNet) + ' / ' + e0(IS.saleNet)],
-            ['Gain net (IR / IS)', e0(IR.gainNet) + ' / ' + e0(IS.gainNet)],
-          ],
+          rows: rows,
           total: ['Régime le plus favorable', 'SCI à l\'' + better + '  (+' + e0(Math.abs(IS.gainNet - IR.gainNet)) + ')'],
-          note: 'IR : résultat foncier × (TMI+PS), plus-value particuliers. IS : amortissement, IS 15/25 %, plus-value sur valeur nette comptable. Indicatif.'
+          note: note
         });
       }
     }));
@@ -811,7 +846,10 @@
   /* ---------- moteur immobilier (un régime, durée variable) ---------- */
   function immoScenario(P, regime, holdY) {
     const frais = computeFraisNotaire(P.prix, P.typeBien, P.tauxDMTO, P.debours), coutTotal = P.prix + frais;
-    const loyerBase = P.prix * P.rdt * (1 - (P.vac || 0));
+    // Statut bailleur privé (Jeanbrun) : loyer décoté selon le bail + amortissement plafonné selon neuf/ancien × bail
+    const jbDict = regime === 'jeanbrun' ? (JB_DICT[(P.typeBien === 'neuf' ? 'neuf' : 'ancien') + '-' + (P.bail || 'intermediaire')] || JB_DICT['ancien-intermediaire']) : null;
+    const jbDecote = regime === 'jeanbrun' ? (JB_DECOTE[P.bail] != null ? JB_DECOTE[P.bail] : 0.15) : 0;
+    const loyerBase = P.prix * P.rdt * (1 - (P.vac || 0)) * (1 - jbDecote);
     const rM = P.taux / 12, nM = P.dc * 12;
     const pmtM = rM === 0 ? P.emp / nM : P.emp * rM / (1 - Math.pow(1 + rM, -nM)), annuite = pmtM * 12;
     let bal = P.emp; const intM = [], balM = [];
@@ -822,11 +860,11 @@
     // Prime d'assurance emprunteur : sur capital initial (constante) ou capital restant dû en début d'année (dégressive)
     const primeADI = y => { if (y > P.dc) return 0; const base = P.adiMode === 'crd' ? (y <= 1 ? P.emp : crd(y - 1)) : P.emp; return base * (P.adi || 0); };
     const chExplY = y => { const lo = loyerY(y); return P.tf * Math.pow(1.01, y - 1) + P.pno * Math.pow(1.01, y - 1) + lo * (P.gest + P.trav) + primeADI(y); };
-    const amImmo = coutTotal * 0.8 / P.amDuree, isSeuil = 42500, isReduit = 0.15, isTaux = 0.25;
+    const amImmo = regime === 'jeanbrun' ? Math.min(0.8 * P.prix * jbDict.taux, jbDict.plafond) : coutTotal * 0.8 / P.amDuree, isSeuil = 42500, isReduit = 0.15, isTaux = 0.25;
     const isOn = x => x <= 0 ? 0 : Math.min(x, isSeuil) * isReduit + Math.max(x - isSeuil, 0) * isTaux;
     let stock = 0, cumAm = 0, cumAmLoc = 0, amStock = 0, deficitRep = 0;
     const apport = Math.max(coutTotal - P.emp, 0);
-    const cf = [-apport]; let somE = 0, saleNet = 0, gainBrut = 0, pvTax = 0;
+    const cf = [-apport]; let somE = 0, saleNet = 0, gainBrut = 0, pvTax = 0, boniDistrib = 0, distribTax = 0;
     const fiscalRows = [], cashRows = []; let svFinal = 0, crdFinal = 0;
     for (let y = 1; y <= holdY; y++) {
       const annY = y <= P.dc ? annuite : 0, loyer = loyerY(y), chExpl = chExplY(y), interets = yint(y);
@@ -846,6 +884,20 @@
           const deficitAutres = Math.max(0, chargesHorsInt - revenuApresInt); // autres charges -> revenu global
           const imputRG = Math.min(deficitAutres, 10700);
           impot = imputRG * P.tmi;                                          // économie d'impôt (revenu global, sans PS)
+          deficitRep += (deficitAutres - imputRG) + deficitInteret;
+        }
+      } else if (regime === 'jeanbrun') {
+        // Statut bailleur privé : amortissement déductible des revenus fonciers ; déficit foncier art. 156 CGI
+        amortYear = amImmo; cumAmLoc += amImmo;                             // amortissements réintégrés à la revente (colonne dédiée)
+        const chargesHorsInt = chExpl + amImmo;                             // amort inclus pour le calcul fiscal uniquement
+        const res = loyer - interets - chargesHorsInt;
+        if (res >= 0) { const ep = Math.min(deficitRep, res); deficitRep -= ep; impot = -(res - ep) * (P.tmi + P.ps); }
+        else {
+          const deficitInteret = Math.max(0, interets - loyer);
+          const revenuApresInt = Math.max(0, loyer - interets);
+          const deficitAutres = Math.max(0, chargesHorsInt - revenuApresInt);   // autres charges + amortissement
+          const imputRG = Math.min(deficitAutres, 10700);
+          impot = imputRG * P.tmi;
           deficitRep += (deficitAutres - imputRG) + deficitInteret;
         }
       } else if (regime === 'mh') { const trav = y <= 3 ? P.prix * 0.15 / 3 : 0; chargesDed = chExpl + trav; impot = -(resFonc - trav) * P.tmi; }
@@ -881,8 +933,8 @@
           const pvCT = cumAmLoc, pvLT = Math.max(sv - coutTotal, 0);
           gainBrut = pvCT + pvLT;
           pvTax = pvCT * (P.tmi + P.ps) + pvLT * 0.30;
-        } else if (regime === 'lmnp') {
-          // LF 2025 : réintégration des amortissements déduits dans la plus-value des particuliers
+        } else if (regime === 'lmnp' || regime === 'jeanbrun') {
+          // LF 2025 (LMNP) / statut bailleur privé : réintégration des amortissements déduits dans la plus-value des particuliers
           gainBrut = Math.max(sv - coutTotal + cumAmLoc, 0);
           const pvIR = gainBrut * (1 - abIR(holdY));
           pvTax = gainBrut > 0 ? pvIR * 0.19 + gainBrut * (1 - abPS(holdY)) * 0.172 + surtaxePV(pvIR) : 0;
@@ -892,15 +944,31 @@
           const pvIR = gainBrut * (1 - abIR(holdY));
           pvTax = gainBrut > 0 ? pvIR * 0.19 + gainBrut * (1 - abPS(holdY)) * 0.172 + surtaxePV(pvIR) : 0;
         }
-        saleNet = sv - crd(holdY) - pvTax; net += saleNet;
+        saleNet = sv - crd(holdY) - pvTax;
+        // SCI à l'IS — 2e étage : distribution du produit de cession à l'associé (PFU 31,4 %)
+        if (regime === 'sci_is') {
+          boniDistrib = Math.max(0, saleNet);                 // produit de cession − CRD − IS sur PV
+          if (P.distributionCession !== 'non') { distribTax = boniDistrib * 0.314; saleNet -= distribTax; }
+        }
+        net += saleNet;
         svFinal = sv; crdFinal = crd(holdY);
       }
       cf.push(net);
     }
     const amortRows = []; { let cdeb = P.emp; for (let y = 1; y <= P.dc; y++) { const it = yint(y), cfin = crd(y), cr = cdeb - cfin; amortRows.push([y, cdeb, cr + it, it, cr, cfin]); cdeb = cfin; } }
-    return { tri: irr(cf), effort: somE / holdY / 12, saleNet, gainBrut, pvTax, gainNet: cf.reduce((a, c) => a + c, 0), sv: svFinal, crd: crdFinal, frais, apport, fiscalRows, cashRows, amortRows };
+    return { tri: irr(cf), effort: somE / holdY / 12, saleNet, gainBrut, pvTax, boniDistrib, distribTax, distribApplied: regime === 'sci_is' && P.distributionCession !== 'non', gainNet: cf.reduce((a, c) => a + c, 0), sv: svFinal, crd: crdFinal, frais, apport, fiscalRows, cashRows, amortRows };
   }
 
+  /* ---------- Statut du bailleur privé (loi Jeanbrun) ----------
+     Amortissement du bien loué nu (résidence principale), sous plafonds de loyer selon le type de bail.
+     Barème : taux d'amortissement selon neuf/ancien × niveau de bail, sur 80 % du prix, plafonné ; loyer décoté ;
+     engagement 9 ans ; déficit foncier (art. 156 CGI, part hors intérêts imputable ≤ 10 700 €/an sur le revenu global) ;
+     amortissements réintégrés dans la plus-value à la revente. Non cumulable Pinel/Denormandie/Malraux. */
+  const JB_DICT = {
+    'neuf-intermediaire': { taux: 0.035, plafond: 8000 }, 'neuf-social': { taux: 0.045, plafond: 10000 }, 'neuf-tres_social': { taux: 0.055, plafond: 12000 },
+    'ancien-intermediaire': { taux: 0.03, plafond: 8000 }, 'ancien-social': { taux: 0.035, plafond: 10000 }, 'ancien-tres_social': { taux: 0.04, plafond: 12000 }
+  };
+  const JB_DECOTE = { intermediaire: 0.15, social: 0.30, tres_social: 0.45 };
   /* -------- Écran : Profil conseiller -------- */
   Object.assign(Screens, {
     profil() {
