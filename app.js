@@ -17,8 +17,8 @@ const el = (tag, props = {}, kids = []) => {
   (Array.isArray(kids) ? kids : [kids]).forEach(c => c != null && n.append(c.nodeType ? c : document.createTextNode(c)));
   return n;
 };
-const eur = n => isFinite(n) ? n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }) : '—';
-const pct = n => isFinite(n) ? n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }) + ' %' : '—';
+const eur = n => isFinite(n) ? n.toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
+const pct = n => isFinite(n) ? n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' %' : '—';
 const num = v => { const x = parseFloat(String(v).replace(/\s/g, '').replace(',', '.')); return isFinite(x) ? x : 0; };
 
 let TOAST_T;
@@ -790,9 +790,12 @@ Object.assign(Calc, {
   },
 
   /* ---- Plus-values immobilières des particuliers ---- */
-  pvImmobiliere({ terrainABatir, dureeDetention, prixCession, fraisCession, prixAcquisition, fraisAcqForfait, fraisAcqReels, fraisTravaux, abattementApplicable }) {
+  pvImmobiliere({ terrainABatir, dureeDetention, prixCession, fraisCession, prixAcquisition, fraisAcqForfait, fraisAcqReels, travauxForfait, fraisTravaux, abattementApplicable }) {
     const fraisAcq = fraisAcqForfait ? prixAcquisition * 0.075 : fraisAcqReels;
-    const prixAcqMajore = prixAcquisition + fraisAcq + fraisTravaux;
+    // Forfait travaux 15 % du prix d'acquisition — art. 150 VB II-4° CGI, de plein droit si détention > 5 ans, sans justificatif
+    const travauxForfaitOk = travauxForfait && dureeDetention > 5;
+    const travaux = travauxForfaitOk ? prixAcquisition * 0.15 : fraisTravaux;
+    const prixAcqMajore = prixAcquisition + fraisAcq + travaux;
     const prixCessionNet = prixCession - fraisCession;
     const pvBrute = Math.max(0, prixCessionNet - prixAcqMajore);
     // Abattements pour durée de détention
@@ -820,7 +823,7 @@ Object.assign(Calc, {
     const totalImp = ir + ps + surtaxe, pvNette = pvBrute - totalImp;
 
     // ---- Export détaillé : cascade de calcul (PDF + Excel avec formules vivantes) ----
-    const e0 = v => eur(Math.round(v));
+    const e0 = v => eur(v);
     const nf = v => (Math.round(v * 100) / 100).toString().replace('.', ',');   // % à la française
     const coefIR = Math.round((1 - abIR / 100) * 1e6) / 1e6;   // coefficient net d'abattement IR (ex. 0.82)
     const coefPS = Math.round((1 - abPS / 100) * 1e6) / 1e6;   // coefficient net d'abattement PS (ex. 0.9505)
@@ -831,7 +834,7 @@ Object.assign(Calc, {
       ['= Prix de cession net (A)', e0(prixCessionNet), { f: '=R[-2]C-R[-1]C', v: prixCessionNet }, 'prix de cession − frais'],
       ['Prix d\'acquisition', e0(prixAcquisition), prixAcquisition, 'saisi'],
       ['+ Frais d\'acquisition', '+ ' + e0(fraisAcq), fraisAcqForfait ? { f: '=R[-1]C*0.075', v: fraisAcq } : fraisAcq, fraisAcqForfait ? '7,5 % × ' + e0(prixAcquisition) : 'frais réels'],
-      ['+ Travaux', '+ ' + e0(fraisTravaux), fraisTravaux, 'travaux (frais réels)'],
+      ['+ Travaux', '+ ' + e0(travaux), travauxForfaitOk ? { f: '=R[-2]C*0.15', v: travaux } : travaux, travauxForfaitOk ? '15 % × ' + e0(prixAcquisition) + ' (forfait > 5 ans)' : 'travaux (frais réels)'],
       ['= Prix de revient majoré (B)', e0(prixAcqMajore), { f: '=R[-3]C+R[-2]C+R[-1]C', v: prixAcqMajore }, 'acquisition + frais + travaux'],
       ['= Plus-value brute (A − B)', e0(pvBrute), { f: '=MAX(0,R[-5]C-R[-1]C)', v: pvBrute }, e0(prixCessionNet) + ' − ' + e0(prixAcqMajore)],
       ['Base imposable IR (abatt. ' + nf(abIR) + ' %)', e0(baseIR), { f: '=R[-1]C*' + coefIR, v: baseIR }, 'PV brute × (1 − ' + nf(abIR) + ' %)'],
@@ -1597,7 +1600,12 @@ const Screens = {
     cFa.append(el('div', { class: 'input-wrap', id: 'c-fa-wrap', style: 'display:none;margin-top:12px' }, [el('input', { id: 'c-fa-val', class: 'inp text-right', inputmode: 'decimal', placeholder: 'Montant réel' }), el('div', { class: 'suffix' }, '€')]));
     sheet.append(cFa);
     $$('button', cFa).forEach(b => b.addEventListener('click', () => { $('#c-fa-wrap').style.display = getToggle('c-fa') === 'reels' ? 'block' : 'none'; }));
-    sheet.append(field('Frais de travaux (frais réels)', moneyInput('c-trav')));
+    const cTv = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Travaux')]);
+    cTv.append(toggleGroup('c-tv', [['forfait', 'Forfait 15%'], ['reels', 'Frais réels']], 'reels'));
+    cTv.append(el('div', { class: 'hint', id: 'c-tv-hint', style: 'margin-top:10px' }, 'Forfait 15 % du prix d\'acquisition, applicable de plein droit sans justificatif si la détention dépasse 5 ans (art. 150 VB II-4° CGI).'));
+    cTv.append(el('div', { class: 'input-wrap', id: 'c-tv-wrap', style: 'margin-top:12px' }, [el('input', { id: 'c-trav', class: 'inp text-right', inputmode: 'decimal', placeholder: 'Montant réel' }), el('div', { class: 'suffix' }, '€')]));
+    sheet.append(cTv);
+    $$('button', cTv).forEach(b => b.addEventListener('click', () => { $('#c-tv-wrap').style.display = getToggle('c-tv') === 'reels' ? 'block' : 'none'; }));
     const cAb = el('div', { class: 'card' }, [el('label', { class: 'field-label', style: 'font-size:17px' }, 'Abattement pour durée de détention applicable')]);
     cAb.append(toggleGroup('c-ab', [['oui', 'Oui'], ['non', 'Non']], 'oui'));
     sheet.append(cAb);
@@ -1607,7 +1615,8 @@ const Screens = {
       prixCession: num($('#c-pc').value), fraisCession: num($('#c-fc').value),
       prixAcquisition: num($('#c-pa').value),
       fraisAcqForfait: getToggle('c-fa') === 'forfait', fraisAcqReels: num($('#c-fa-val').value),
-      fraisTravaux: num($('#c-trav').value), abattementApplicable: getToggle('c-ab') === 'oui',
+      travauxForfait: getToggle('c-tv') === 'forfait', fraisTravaux: num($('#c-trav').value),
+      abattementApplicable: getToggle('c-ab') === 'oui',
     }))));
     v.append(sheet); return v;
   },
