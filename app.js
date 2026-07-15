@@ -1149,14 +1149,14 @@ const Screens = {
       sheet.append(banner);
     }
     const cats = [
-      ['Assurance-Vie', 'av', 'Fiscalité décès & rachat'],
-      ['Fiscalité des particuliers', 'part', 'IR, CEHR, dividendes, plus-values'],
-      ['Immobilier', 'immo', 'Calculatrices + simulateurs (TRI, SCI, Acheter/Louer)'],
-      ['Transmission d\'entreprise', 'transmission', 'Pacte Dutreil & Apport-cession 150-0 B ter'],
-      ['Succession / Donation', 'succ', 'DMTG droits simples & inclus'],
-      ['Épargne & retraite', 'epargne', 'Monte Carlo, capitalisation, dossiers enregistrés'],
-      ['Société', 'soc', 'Impôt sur les sociétés'],
-      ['Actualisation / Capitalisation / Emprunt', 'fin', 'Intérêts, taux, emprunt'],
+      ['🏠 Investir dans l\'immobilier', 'immo', 'TRI locatif, SCI, Jeanbrun, Denormandie, Loc\'Avantages, frais de notaire, IFI, plus-values…'],
+      ['📈 Retraite & liberté financière', 'epargne', 'Liberté financière, Monte-Carlo, capitalisation, mes dossiers'],
+      ['🧮 Impôt du particulier', 'part', 'IR, CEHR, dividendes, plus-values mobilières, plafonnement des niches'],
+      ['🛡️ Assurance-vie', 'av', 'Fiscalité décès (990 I, 757 B) & rachat'],
+      ['🎁 Succession & donation', 'succ', 'DMTG — droits simples & inclus'],
+      ['🏢 Transmission d\'entreprise', 'transmission', 'Pacte Dutreil & apport-cession 150-0 B ter'],
+      ['🏛️ Société', 'soc', 'Impôt sur les sociétés'],
+      ['💶 Outils financiers', 'fin', 'Intérêts, taux, emprunt, actualisation, capitalisation'],
     ];
     cats.forEach(([title, key, sub]) => {
       sheet.append(el('div', { class: 'menu-item', onclick: () => Router.go(key) }, [
@@ -1188,7 +1188,7 @@ const Screens = {
   /* -------- Menu Finance -------- */
   fin() {
     const v = el('div', {});
-    v.append(hero('CALCULATRICE', 'Finance'));
+    v.append(hero('CALCULATRICE', 'Outils financiers'));
     const sheet = el('div', { class: 'sheet' });
     [
       ['Intérêts simples', 'fin_simple'],
@@ -1421,7 +1421,7 @@ const Screens = {
   /* ======================= MENUS DE CATÉGORIE ======================= */
   part() {
     const v = el('div', {});
-    v.append(hero('CALCULATRICE', 'Fiscalité des particuliers'));
+    v.append(hero('CALCULATRICE', 'Impôt du particulier'));
     const sheet = el('div', { class: 'sheet' });
     [
       ["Calcul de l'impôt sur le revenu", 'p_ir'],
@@ -1434,7 +1434,7 @@ const Screens = {
   },
   immo() {
     const v = el('div', {});
-    v.append(hero('CALCULATRICE', 'Immobilier'));
+    v.append(hero('CALCULATRICE', 'Investir dans l\'immobilier'));
     const sheet = el('div', { class: 'sheet' });
     sheet.append(el('div', { class: 'group-label' }, 'Calculatrices'));
     [
@@ -1459,10 +1459,10 @@ const Screens = {
   },
   epargne() {
     const v = el('div', {});
-    v.append(hero('CALCULATRICE', 'Épargne & retraite'));
+    v.append(hero('CALCULATRICE', 'Retraite & liberté financière'));
     const sheet = el('div', { class: 'sheet' });
     sheet.append(el('div', { class: 'group-label' }, 'Simulateurs'));
-    [['Épargne-retraite (Monte Carlo)', 'sim_retraite'], ['Capital par classe d\'actifs', 'sim_capital']]
+    [['Liberté financière', 'sim_liberte'], ['Épargne-retraite (Monte Carlo)', 'sim_retraite'], ['Capital par classe d\'actifs', 'sim_capital']]
       .forEach(([t, key]) => simMenuItem(sheet, t, key));
     sheet.append(el('div', { class: 'group-label' }, 'Mes dossiers'));
     simMenuItem(sheet, '★ Mes simulations enregistrées', 'sim_saved');
@@ -1470,7 +1470,7 @@ const Screens = {
   },
   succ() {
     const v = el('div', {});
-    v.append(hero('CALCULATRICE', 'Succession / Donation'));
+    v.append(hero('CALCULATRICE', 'Succession & donation'));
     const sheet = el('div', { class: 'sheet' });
     [
       ['Fiscalité – DMTG – Donations avec droits inclus', 's_inclus'],
