@@ -634,7 +634,7 @@
       sheet.append(field('Loyer équivalent / an (% du bien)', pctInput('a-loyer', '4')));
       sheet.append(field('Indexation du loyer (IRL)', pctInput('a-irl', '1,5')));
       sheet.append(field('Rendement du placement', pctInput('a-place', '4')));
-      sheet.append(field('Flat tax sur plus-values', pctInput('a-flat', '30')));
+      sheet.append(field('Flat tax sur plus-values', pctInput('a-flat', '31,4')));
       sheet.append(field('Horizon d\'analyse', stepper('a-hor', 25, 1, 40)));
       sheet.append(actions(() => {
         const P = gv('a-prix'), apport = gv('a-apport'), taux = gv('a-taux') / 100;
@@ -1027,10 +1027,10 @@
           const vnc = Math.max(coutTotal - cumAm, 0); gainBrut = Math.max(sv - vnc, 0);
           pvTax = isOn(sciBase + gainBrut) - isOn(sciBase);                  // PV imposée en partageant le seuil 15% de l'année
         } else if (regime === 'lmp') {
-          // plus-value professionnelle : court terme (amortissements déduits) au barème ; long terme (appréciation) au PFU 30%
+          // plus-value professionnelle : court terme (amortissements déduits) au barème ; long terme (appréciation) au PFU 31,4 % (2026)
           const pvCT = cumAmLoc, pvLT = Math.max(sv - coutTotal, 0);
           gainBrut = pvCT + pvLT;
-          pvTax = pvCT * (P.tmi + P.ps) + pvLT * 0.30;
+          pvTax = pvCT * (P.tmi + P.ps) + pvLT * 0.314;
         } else if (regime === 'lmnp' || regime === 'jeanbrun') {
           // LF 2025 (LMNP) / statut bailleur privé : réintégration des amortissements déduits dans la plus-value des particuliers
           gainBrut = Math.max(sv - coutTotal + cumAmLoc, 0);
