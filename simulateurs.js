@@ -269,8 +269,8 @@
       title: pre + 'Trésorerie — encaissements (+) / décaissements (−)',
       head: ['An', 'Loyer (+)', 'Capital (−)', 'Intérêts (−)', 'Charges (−)', 'Impôt', 'Cash-flow'],
       rows: R.cashRows.map(d => [String(d[0]), '+ ' + eN(d[1]), neg(d[2]), neg(d[3]), neg(d[4]), (Math.round(d[5]) === 0 ? eN(0) : (d[5] > 0 ? '+ ' + eN(d[5]) : neg(d[5]))), eN(d[6])]).concat([
-        ['Revente', '+ ' + eN(R.sv), '', '', neg(R.pvTax) + ' (PV)', (R.crd > 0 ? neg(R.crd) + ' (CRD)' : '') + (R.distribApplied ? ' ' + neg(R.distribTax) + ' (PFU)' : ''), '+ ' + eN(R.saleNet)],
         ['Σ totaux', '+ ' + eN(csum(1)), neg(csum(2)), neg(csum(3)), neg(csum(4)), eN(csum(5)), eN(csum(6))],
+        ['Revente', '+ ' + eN(R.sv), '', '', neg(R.pvTax) + ' (PV)', (R.crd > 0 ? neg(R.crd) + ' (CRD)' : '') + (R.distribApplied ? ' ' + neg(R.distribTax) + ' (PFU)' : ''), '+ ' + eN(R.saleNet)],
         ['Flux net an ' + N + ' (avec revente — base du TRI)', '', '', '', '', '', eN(lastOp + R.saleNet)]
       ]),
       xl: { data: R.cashRows.map(d => [d[0], d[1], d[2], d[3], d[4], d[5], d[6]]), fcol: { 6: '=RC[-5]-RC[-4]-RC[-3]-RC[-2]+RC[-1]' }, sum: true,
@@ -500,6 +500,65 @@
     },
 
     /* -------- Capitalisation par classe d'actifs -------- */
+    /* -------- Liberté financière -------- */
+    sim_liberte() {
+      const v = el('div', {}); v.append(hero('SIMULATEUR', 'Liberté financière', SW));
+      const sheet = el('div', { class: 'sheet' });
+      sheet.append(field('Revenu net annuel souhaité', moneyInput('lf-net', '30000'), 'Revenu net d\'impôt que le capital doit servir chaque année.'));
+      const cMode = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Objectif')]);
+      cMode.append(selectField('lf-mode', [['consommation', 'Consommer le capital sur une durée'], ['perpetuel', 'Rente perpétuelle (patrimoine préservé)']], 'consommation'));
+      sheet.append(cMode);
+      const modeSel = cMode.querySelector('select');
+      const cDuree = field('Durée (consommation du capital)', stepper('lf-duree', 25, 1, 60));
+      sheet.append(cDuree);
+      sheet.append(field('Rendement du capital / an', pctInput('lf-rdt', '4')));
+      sheet.append(field('Inflation / an', pctInput('lf-infl', '2')));
+      const cFisc = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Fiscalité des retraits')]);
+      cFisc.append(selectField('lf-fisc', [['pfu', 'PFU / flat tax (31,4 %)'], ['av', 'Assurance-vie (abattement + taux réduit)'], ['libre', 'Taux personnalisé']], 'pfu'));
+      sheet.append(cFisc);
+      const fiscSel = cFisc.querySelector('select');
+      const cPfu = field('Taux PFU', pctInput('lf-pfu', '31,4'));
+      const cLibre = field('Taux d\'imposition des gains', pctInput('lf-libre', '30'));
+      const cAvAb = field('Abattement annuel (assurance-vie)', moneyInput('lf-avab', '4600'), '4 600 € (personne seule) / 9 200 € (couple).');
+      const cAvRate = field('Taux d\'imposition AV (gains)', pctInput('lf-avrate', '24,7'), '7,5 % (contrat > 8 ans) + 17,2 % PS = 24,7 %.');
+      sheet.append(cPfu); sheet.append(cLibre); sheet.append(cAvAb); sheet.append(cAvRate);
+      const syncMode = () => { cDuree.style.display = modeSel.value === 'consommation' ? '' : 'none'; };
+      const syncFisc = () => { const f = fiscSel.value; cPfu.style.display = f === 'pfu' ? '' : 'none'; cLibre.style.display = f === 'libre' ? '' : 'none'; cAvAb.style.display = f === 'av' ? '' : 'none'; cAvRate.style.display = f === 'av' ? '' : 'none'; };
+      modeSel.addEventListener('change', syncMode); fiscSel.addEventListener('change', syncFisc);
+      sheet.append(actions(() => {
+        const P = {
+          revenuNet: gv('lf-net'), rendement: gv('lf-rdt') / 100, inflation: gv('lf-infl') / 100,
+          mode: gvSel('lf-mode'), duree: Math.max(1, Math.round(gv('lf-duree'))),
+          fisc: gvSel('lf-fisc'), tauxPFU: gv('lf-pfu') / 100, tauxLibre: gv('lf-libre') / 100,
+          avAbatt: gv('lf-avab'), avRate: gv('lf-avrate') / 100
+        };
+        const R = liberteScenario(P);
+        const fiscTxt = P.fisc === 'pfu' ? 'PFU ' + p2(P.tauxPFU * 100) : P.fisc === 'av' ? 'assurance-vie (abattement ' + e0(P.avAbatt) + ', ' + p2(P.avRate * 100) + ')' : 'taux ' + p2(P.tauxLibre * 100);
+        if (R.mode === 'consommation') {
+          const tables = [{
+            kind: 'cash', title: 'Projection annuelle — décumul', head: ['Année', 'Capital début', 'Retrait brut', 'Impôt', 'Retrait net', 'Capital fin'],
+            rows: R.rows.map(d => [String(d[0]), e0(d[1]), e0(d[2]), e0(d[3]), e0(d[4]), e0(d[5])]),
+            xl: { data: R.rows.map(d => [d[0], d[1], d[2], d[3], d[4], d[5]]), fcol: { 4: '=RC[-2]-RC[-1]' } }
+          }];
+          simRender(sheet, {
+            title: 'Liberté financière', exportTables: tables,
+            rows: [['Capital nécessaire au départ', e0(R.capital)], ['Durée de consommation', R.N + ' ans'], ['Total net perçu', e0(R.totNet)], ['Total impôt sur les retraits', e0(R.totTax)]],
+            total: ['Capital nécessaire', e0(R.capital)],
+            note: 'Capital à constituer pour percevoir le revenu net souhaité (indexé inflation) pendant la durée choisie, capital épuisé à la fin. L\'impôt ne porte que sur la fraction de gains de chaque retrait. Fiscalité : ' + fiscTxt + '. Indicatif.'
+          });
+        } else {
+          simRender(sheet, {
+            title: 'Liberté financière — rente perpétuelle',
+            rows: [['Capital nécessaire', e0(R.capital)], ['Rendement réel (rendement − inflation)', p2(R.real * 100)], ['Retrait brut annuel', e0(R.grossAn1)], ['Impôt annuel', e0(R.taxAn1)]],
+            total: ['Capital nécessaire', e0(R.capital)],
+            note: 'Rente perpétuelle : on ne prélève que le rendement réel (rendement − inflation), le capital conserve sa valeur. Capital = retrait brut annuel ÷ rendement réel. Fiscalité : ' + fiscTxt + '. Indicatif.'
+          });
+        }
+      }));
+      syncMode(); syncFisc();
+      v.append(sheet); return v;
+    },
+
     sim_capital() {
       const v = el('div', {}); v.append(hero('SIMULATEUR', 'Capitalisation', SW));
       const sheet = el('div', { class: 'sheet' });
@@ -717,14 +776,29 @@
     let regSelect = null;
     if (!compare) {
       const cR = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Régime fiscal')]);
-      cR.append(selectField(pfx + '-reg', [['rf', 'Revenus fonciers (réel)'], ['deficit', 'Déficit foncier'], ['jeanbrun', 'Statut bailleur privé (Jeanbrun)'], ['lmnp', 'LMNP (amortissement)'], ['lmp', 'LMP'], ['sci_is', 'SCI à l\'IS'], ['malraux', 'Malraux'], ['mh', 'Monument historique']], 'rf'));
+      cR.append(selectField(pfx + '-reg', [['rf', 'Revenus fonciers (réel)'], ['deficit', 'Déficit foncier'], ['jeanbrun', 'Statut bailleur privé (Jeanbrun)'], ['denormandie', 'Denormandie'], ['locavantages', 'Loc\'Avantages'], ['lmnp', 'LMNP (amortissement)'], ['lmp', 'LMP'], ['sci_is', 'SCI à l\'IS'], ['malraux', 'Malraux'], ['mh', 'Monument historique']], 'rf'));
       sheet.append(cR);
       regSelect = cR.querySelector('select');
+      // Jeanbrun : niveau de bail
       const cBail = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Niveau de loyer (bail Jeanbrun)')]);
       cBail.append(selectField(pfx + '-bail', [['intermediaire', 'Intermédiaire (loyer −15 %)'], ['social', 'Social (−30 %)'], ['tres_social', 'Très social (−45 %)']], 'intermediaire'));
       cBail.append(el('div', { class: 'hint', style: 'margin-top:10px' }, 'Loyer plafonné (décote) et amortissement du prix (80 %) selon neuf/ancien × bail ; le rendement saisi est le rendement de marché avant décote.'));
-      sheet.append(cBail);
-      regSelect.__cBail = cBail;
+      sheet.append(cBail); regSelect.__cBail = cBail;
+      // Denormandie : durée d'engagement → taux de réduction
+      const cDeno = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Engagement Denormandie')]);
+      cDeno.append(selectField(pfx + '-deno', [['6', '6 ans — réduction 12 %'], ['9', '9 ans — 18 %'], ['12', '12 ans — 21 %']], '9'));
+      cDeno.append(el('div', { class: 'hint', style: 'margin-top:10px' }, 'Ancien avec travaux ≥ 25 % du coût total, en zone éligible (Action cœur de ville). Réduction sur le coût (plafond 300 000 €). Loyer plafonné : rendement saisi = loyer plafonné.'));
+      sheet.append(cDeno); regSelect.__cDeno = cDeno;
+      // Loc'Avantages : niveau de convention → taux de réduction sur le revenu brut
+      const cLoca = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Convention Loc\'Avantages')]);
+      cLoca.append(selectField(pfx + '-loca', [['loc1', 'Loc1 — réduction 15 %'], ['loc1i', 'Loc1 + intermédiation — 20 %'], ['loc2', 'Loc2 — 35 %'], ['loc2i', 'Loc2 + intermédiation — 40 %'], ['loc3i', 'Loc3 + intermédiation — 65 %']], 'loc2'));
+      cLoca.append(el('div', { class: 'hint', style: 'margin-top:10px' }, 'Loyer plafonné (décote selon Loc1/2/3). Réduction d\'impôt calculée sur le revenu brut foncier ; le rendement saisi est le rendement de marché avant décote.'));
+      sheet.append(cLoca); regSelect.__cLoca = cLoca;
+      // Déficit foncier : travaux éligibles (montant réel)
+      const cDefT = field('Travaux éligibles au déficit foncier', moneyInput(pfx + '-deftrav', '45000'), 'Montant réel (hors intérêts). La part au-delà des loyers est imputable sur le revenu global ≤ 10 700 €/an ; l\'excédent est reporté.');
+      sheet.append(cDefT); regSelect.__cDefT = cDefT;
+      const cDefTa = field('Étalement des travaux (déficit foncier)', stepper(pfx + '-deftravans', 1, 1, 10));
+      sheet.append(cDefTa); regSelect.__cDefTa = cDefTa;
     }
     sheet.append(field('Prix du bien (hors frais)', moneyInput(pfx + '-prix', compare ? '600000' : '300000')));
     const cTB = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Type de bien')]);
@@ -766,10 +840,14 @@
     sheet.append(cDist);
     if (regSelect) {
       const syncAm = () => {
-        const r = regSelect.value, jb = (r === 'jeanbrun');
+        const r = regSelect.value;
         amWrap.style.display = (r === 'lmnp' || r === 'lmp' || r === 'sci_is') ? '' : 'none';   // Jeanbrun : amortissement automatique
         cDist.style.display = (r === 'sci_is') ? '' : 'none';
-        if (regSelect.__cBail) regSelect.__cBail.style.display = jb ? '' : 'none';
+        if (regSelect.__cBail) regSelect.__cBail.style.display = (r === 'jeanbrun') ? '' : 'none';
+        if (regSelect.__cDeno) regSelect.__cDeno.style.display = (r === 'denormandie') ? '' : 'none';
+        if (regSelect.__cLoca) regSelect.__cLoca.style.display = (r === 'locavantages') ? '' : 'none';
+        if (regSelect.__cDefT) regSelect.__cDefT.style.display = (r === 'deficit') ? '' : 'none';
+        if (regSelect.__cDefTa) regSelect.__cDefTa.style.display = (r === 'deficit') ? '' : 'none';
       };
       regSelect.addEventListener('change', syncAm); syncAm();
     }
@@ -782,7 +860,9 @@
         tmi: gv(pfx + '-tmi') / 100, ps: gv(pfx + '-ps') / 100, amDuree: Math.max(1, Math.round(gv(pfx + '-am'))),
         typeBien: gvSel(pfx + '-tb'), tauxDMTO: parseFloat(gvSel(pfx + '-dmto')), debours: gv(pfx + '-deb'),
         adi: gv(pfx + '-adi') / 100, adiMode: gvSel(pfx + '-adimode'), vac: gv(pfx + '-vac') / 100,
-        distributionCession: gvSel(pfx + '-distrib'), bail: compare ? 'intermediaire' : gvSel(pfx + '-bail')
+        distributionCession: gvSel(pfx + '-distrib'), bail: compare ? 'intermediaire' : gvSel(pfx + '-bail'),
+        denoDur: compare ? 9 : Math.round(parseFloat(gvSel(pfx + '-deno'))), locaLevel: compare ? 'loc2' : gvSel(pfx + '-loca'),
+        defTrav: compare ? 0 : gv(pfx + '-deftrav'), defTravAns: compare ? 1 : Math.max(1, Math.round(gv(pfx + '-deftravans')))
       };
       if (!compare) {
         const reg = gvSel(pfx + '-reg'), R = immoScenario(P, reg, P.hold);
@@ -806,6 +886,9 @@
         let note = 'Frais de notaire ajoutés au prix (n\'entrent pas dans le loyer, majorent le prix d\'acquisition pour la plus-value). Loyer net de vacance/impayés et indexé IRL. Assurance emprunteur incluse dans le coût du crédit. Plus-value selon le régime, avec surtaxe au-delà de 50 000 € de PV imposable. Indicatif, hors cas particuliers.';
         if (isSci && !R.distribApplied) note = '⚠️ Produit de cession conservé dans la société, non disponible pour l\'associé sans imposition supplémentaire (PFU 31,4 %). ' + note;
         if (isJb) note = 'Statut du bailleur privé (Jeanbrun) : location nue, résidence principale, engagement 9 ans. Loyer plafonné (décote de bail) — le rendement saisi est le rendement de marché avant décote. Amortissement du prix (80 %) déductible, déficit foncier (part hors intérêts imputable ≤ 10 700 €/an), amortissements réintégrés dans la plus-value. Non cumulable Pinel/Denormandie/Malraux. Paramètres 2026 indicatifs. ' + note;
+        if (reg === 'denormandie') note = 'Denormandie : réduction d\'impôt 12 / 18 / 21 % (engagement 6 / 9 / 12 ans) sur le coût de l\'opération plafonné à 300 000 €, dans l\'ancien avec travaux ≥ 25 % en zone éligible (Action cœur de ville). Loyer plafonné — le rendement saisi est le loyer plafonné. Réduction incluse dans l\'impôt. Paramètres 2026 indicatifs. ' + note;
+        if (reg === 'locavantages') note = 'Loc\'Avantages : réduction d\'impôt de 15 à 65 % du revenu brut foncier selon la convention (Loc1 / Loc2 / Loc3, avec ou sans intermédiation locative), en contrepartie d\'un loyer plafonné — le rendement saisi est le rendement de marché avant décote. Paramètres 2026 indicatifs. ' + note;
+        if (reg === 'deficit') note = 'Déficit foncier : les travaux éligibles saisis (hors intérêts) s\'imputent sur les revenus fonciers, l\'excédent sur le revenu global ≤ 10 700 €/an (report des surplus). ' + note;
         simRender(sheet, {
           title: 'Résultats',
           exportTables: immoExportTables(R),
@@ -849,7 +932,8 @@
     // Statut bailleur privé (Jeanbrun) : loyer décoté selon le bail + amortissement plafonné selon neuf/ancien × bail
     const jbDict = regime === 'jeanbrun' ? (JB_DICT[(P.typeBien === 'neuf' ? 'neuf' : 'ancien') + '-' + (P.bail || 'intermediaire')] || JB_DICT['ancien-intermediaire']) : null;
     const jbDecote = regime === 'jeanbrun' ? (JB_DECOTE[P.bail] != null ? JB_DECOTE[P.bail] : 0.15) : 0;
-    const loyerBase = P.prix * P.rdt * (1 - (P.vac || 0)) * (1 - jbDecote);
+    const decoteReg = regime === 'locavantages' ? (LOCA_DECOTE[P.locaLevel] != null ? LOCA_DECOTE[P.locaLevel] : 0.30) : jbDecote;
+    const loyerBase = P.prix * P.rdt * (1 - (P.vac || 0)) * (1 - decoteReg);
     const rM = P.taux / 12, nM = P.dc * 12;
     const pmtM = rM === 0 ? P.emp / nM : P.emp * rM / (1 - Math.pow(1 + rM, -nM)), annuite = pmtM * 12;
     let bal = P.emp; const intM = [], balM = [];
@@ -871,10 +955,24 @@
       const resFonc = loyer - chExpl - interets; let impot = 0, sciBase = 0, amortYear = 0, chargesDed = chExpl;
       if (regime === 'rf') impot = -resFonc * (P.tmi + P.ps);
       else if (regime === 'malraux') impot = -resFonc * (P.tmi + P.ps) + (y <= 3 ? P.prix * 0.5 * 0.30 / 3 : 0);
+      else if (regime === 'denormandie') {
+        // Revenus fonciers réel + réduction d'impôt (base = coût, plafond 300 000 €) étalée sur l'engagement
+        const base = Math.min(coutTotal, 300000);
+        const reduc = P.denoDur === 12 ? (y <= 9 ? base * 0.02 : (y <= 12 ? base * 0.01 : 0))
+          : P.denoDur === 9 ? (y <= 9 ? base * 0.02 : 0)
+          : (y <= 6 ? base * 0.02 : 0);
+        impot = -resFonc * (P.tmi + P.ps) + reduc;
+      }
+      else if (regime === 'locavantages') {
+        // Revenus fonciers réel + réduction d'impôt calculée sur le revenu brut foncier (loyer)
+        const reduc = loyer * (LOCA_REDUC[P.locaLevel] != null ? LOCA_REDUC[P.locaLevel] : 0.35);
+        impot = -resFonc * (P.tmi + P.ps) + reduc;
+      }
       else if (regime === 'deficit') {
         // intérêts d'emprunt imputables UNIQUEMENT sur les revenus fonciers ;
         // déficit "autres charges" imputable sur le revenu global, plafonné à 10 700 €.
-        const trav = y <= 3 ? P.prix * 0.15 / 3 : 0;
+        const travAns = Math.max(1, P.defTravAns || 1);
+        const trav = y <= travAns ? (P.defTrav || 0) / travAns : 0;
         const chargesHorsInt = chExpl + trav; chargesDed = chargesHorsInt;
         const res = loyer - interets - chargesHorsInt;
         if (res >= 0) { const ep = Math.min(deficitRep, res); deficitRep -= ep; impot = -(res - ep) * (P.tmi + P.ps); }
@@ -959,6 +1057,53 @@
     return { tri: irr(cf), effort: somE / holdY / 12, saleNet, gainBrut, pvTax, boniDistrib, distribTax, distribApplied: regime === 'sci_is' && P.distributionCession !== 'non', gainNet: cf.reduce((a, c) => a + c, 0), sv: svFinal, crd: crdFinal, frais, apport, fiscalRows, cashRows, amortRows };
   }
 
+  /* ---------- Liberté financière : capital nécessaire pour un revenu net souhaité, net de la fiscalité des retraits ----------
+     Fiscalité des retraits, 3 choix : assurance-vie (abattement + 7,5 %/12,8 % + PS), PFU (31,4 % en 2026), ou taux libre.
+     L'impôt ne porte que sur la fraction de gains de chaque retrait (base de coût suivie année par année). */
+  function fiscRetrait(net, cap, basis, P) {
+    const gf = cap > 0 ? Math.max(0, (cap - basis)) / cap : 0;      // fraction de gains du retrait
+    let gross, tax;
+    if (P.fisc === 'pfu' || P.fisc === 'libre') {
+      const rate = (P.fisc === 'pfu' ? P.tauxPFU : P.tauxLibre);
+      gross = net / (1 - gf * rate); tax = gross * gf * rate;
+    } else {                                                        // assurance-vie : abattement annuel puis taux réduit
+      const rate = P.avRate, ab = P.avAbatt;
+      gross = (net - ab * rate) / (1 - gf * rate);
+      if (gross * gf <= ab) { gross = net; tax = 0; }               // gains sous l'abattement → pas d'impôt
+      else tax = (gross * gf - ab) * rate;
+    }
+    const retC = cap > 0 ? gross * (basis / cap) : 0;               // part "capital" du retrait (réduit la base)
+    return { gross, tax, newBasis: Math.max(0, basis - retC) };
+  }
+  function liberteScenario(P) {
+    const r = P.rendement, i = P.inflation;
+    if (P.mode === 'perpetuel') {
+      // rente perpétuelle : on prélève le rendement réel (r − i) ; en régime permanent le retrait est ~intégralement du gain
+      const f = fiscRetrait(P.revenuNet, 1, 0, P);                  // gf = 1 (tout est gain)
+      const grossNeeded = f.gross, real = Math.max(0.0001, r - i);
+      const capital = grossNeeded / real;
+      return { mode: 'perpetuel', capital, grossAn1: grossNeeded, taxAn1: f.tax, real, rows: [] };
+    }
+    // consommation du capital sur la durée : on cherche le capital initial tel que le capital s'épuise à la fin
+    const N = Math.max(1, Math.round(P.duree));
+    const simulate = (C, collect) => {
+      let cap = C, basis = C; const rows = [];
+      for (let y = 1; y <= N; y++) {
+        const deb = cap; cap *= (1 + r);
+        const netY = P.revenuNet * Math.pow(1 + i, y - 1);
+        const f = fiscRetrait(netY, cap, basis, P);
+        cap -= f.gross; basis = f.newBasis;
+        if (collect) rows.push([y, deb, f.gross, f.tax, netY, Math.max(0, cap)]);
+      }
+      return collect ? rows : cap;
+    };
+    let lo = 0, hi = P.revenuNet * N * 3 + 1e6;                     // borne haute large
+    for (let k = 0; k < 80; k++) { const mid = (lo + hi) / 2; if (simulate(mid) >= 0) hi = mid; else lo = mid; }
+    const capital = hi, rows = simulate(capital, true);
+    const totNet = rows.reduce((s, x) => s + x[4], 0), totTax = rows.reduce((s, x) => s + x[3], 0), totGross = rows.reduce((s, x) => s + x[2], 0);
+    return { mode: 'consommation', capital, rows, totNet, totTax, totGross, N };
+  }
+
   /* ---------- Statut du bailleur privé (loi Jeanbrun) ----------
      Amortissement du bien loué nu (résidence principale), sous plafonds de loyer selon le type de bail.
      Barème : taux d'amortissement selon neuf/ancien × niveau de bail, sur 80 % du prix, plafonné ; loyer décoté ;
@@ -969,6 +1114,9 @@
     'ancien-intermediaire': { taux: 0.03, plafond: 8000 }, 'ancien-social': { taux: 0.035, plafond: 10000 }, 'ancien-tres_social': { taux: 0.04, plafond: 12000 }
   };
   const JB_DECOTE = { intermediaire: 0.15, social: 0.30, tres_social: 0.45 };
+  // Loc'Avantages : décote de loyer (plafond) et taux de réduction d'impôt sur le revenu brut foncier selon la convention
+  const LOCA_DECOTE = { loc1: 0.15, loc1i: 0.15, loc2: 0.30, loc2i: 0.30, loc3i: 0.45 };
+  const LOCA_REDUC = { loc1: 0.15, loc1i: 0.20, loc2: 0.35, loc2i: 0.40, loc3i: 0.65 };
   /* -------- Écran : Profil conseiller -------- */
   Object.assign(Screens, {
     profil() {
