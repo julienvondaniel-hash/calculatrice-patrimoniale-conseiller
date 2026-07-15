@@ -570,9 +570,9 @@ Object.assign(Calc, {
     };
   },
 
-  /* ---- Dividendes : PFU 30% vs barème ---- */
+  /* ---- Dividendes : PFU 31,4% (2026) vs barème ---- */
   dividendes({ montant, tmi, optionBareme }) {
-    const ps = montant * 0.172;
+    const ps = montant * 0.186;   // prélèvements sociaux 2026 : 18,6 %
     const pfu = montant * 0.128; // IR forfaitaire
     const rows = [['Dividendes bruts', eur(montant)]];
     if (optionBareme) {
@@ -584,18 +584,18 @@ Object.assign(Calc, {
       rows.push(['Abattement 40%', '– ' + eur(abattement)]);
       rows.push(['Base imposable IR', eur(baseIR)]);
       rows.push([`IR (TMI ${tmi}%)`, eur(ir)]);
-      rows.push(['Prélèvements sociaux (17,2%)', eur(ps)]);
+      rows.push(['Prélèvements sociaux (18,6%)', eur(ps)]);
       rows.push(['Dont CSG déductible récupérée', '– ' + eur(csgDeductible)]);
       const total = ir + ps - csgDeductible;
       return { rows, total: ['Imposition totale (option barème)', eur(total)], net: ['Dividendes nets', eur(montant - total)], note: "Option barème progressif : abattement de 40%, CSG déductible 6,8%. À comparer avec le PFU." };
     }
     rows.push(['IR forfaitaire (12,8%)', eur(pfu)]);
-    rows.push(['Prélèvements sociaux (17,2%)', eur(ps)]);
+    rows.push(['Prélèvements sociaux (18,6%)', eur(ps)]);
     return {
       rows,
-      total: ['Flat tax (PFU 30%)', eur(pfu + ps)],
+      total: ['Flat tax (PFU 31,4%)', eur(pfu + ps)],
       net: ['Dividendes nets', eur(montant - pfu - ps)],
-      note: "PFU (flat tax) 30% = 12,8% IR + 17,2% PS. Sans abattement. Comparez avec l'option barème si votre TMI est faible."
+      note: "PFU (flat tax) 31,4% (2026) = 12,8% IR + 18,6% PS. Sans abattement. Comparez avec l'option barème si votre TMI est faible."
     };
   },
 
@@ -624,7 +624,7 @@ Object.assign(Calc, {
   /* ---- Plus-values de cession de valeurs mobilières ---- */
   pvMobilieres({ pv, optionBareme, tmi, departRetraite }) {
     if (pv <= 0) return { rows: [['Moins-value', eur(pv)]], total: ['Imposition', eur(0)], note: "Une moins-value est imputable sur les plus-values de même nature des 10 années suivantes." };
-    const ps = pv * 0.172;
+    const ps = pv * 0.186;   // prélèvements sociaux 2026 : 18,6 %
     const rows = [['Plus-value', eur(pv)]];
     let ir;
     if (departRetraite) {
@@ -637,12 +637,12 @@ Object.assign(Calc, {
       ir = optionBareme ? pv * (tmi / 100) : pv * 0.128;
     }
     rows.push(optionBareme ? [`IR barème (TMI ${tmi}%)`, eur(ir)] : ['IR forfaitaire (12,8%)', eur(ir)]);
-    rows.push(['Prélèvements sociaux (17,2%)', eur(ps)]);
+    rows.push(['Prélèvements sociaux (18,6%)', eur(ps)]);
     return {
       rows,
       total: ['Imposition totale', eur(ir + ps)],
       net: ['Plus-value nette', eur(pv - ir - ps)],
-      note: "PFU 30% par défaut. Option barème possible (abattements pour durée de détention si titres acquis avant 2018). Abattement fixe 500 000 € pour départ à la retraite du dirigeant."
+      note: "PFU 31,4% (2026) par défaut. Option barème possible (abattements pour durée de détention si titres acquis avant 2018). Abattement fixe 500 000 € pour départ à la retraite du dirigeant."
     };
   },
 
