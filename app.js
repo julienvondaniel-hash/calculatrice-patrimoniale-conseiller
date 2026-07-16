@@ -1817,6 +1817,39 @@ const Screens = {
 /* ============================================================
    ROUTEUR
    ============================================================ */
+/* Accroche affichée en haut de chaque simulateur (« à quoi ça sert ») */
+const SIM_INTROS = {
+  av_757b: "Fiscalité au décès de l'assurance-vie pour les primes versées après 70 ans (art. 757 B) : abattement global de 30 500 €, puis droits de succession selon le lien de parenté.",
+  av_990i: "Fiscalité au décès de l'assurance-vie pour les primes versées avant 70 ans (art. 990 I) : abattement de 152 500 € par bénéficiaire, puis 20 % jusqu'à 700 000 € et 31,25 % au-delà.",
+  av_regles: "Rappelle quelle règle de taxation au décès s'applique à un contrat d'assurance-vie selon la date de souscription, l'âge aux versements et la date des primes.",
+  av_rachat: "Estime l'imposition d'un rachat sur un contrat d'assurance-vie : PFU 12,8 % / 7,5 % + prélèvements sociaux, avec l'abattement annuel après 8 ans de détention.",
+  p_ir: "Calcule l'impôt sur le revenu au barème progressif, avec quotient familial (plafonnement des demi-parts) et décote.",
+  p_cehr: "Estime la contribution exceptionnelle sur les hauts revenus (CEHR) : 3 % puis 4 % au-delà des seuils, selon la situation familiale.",
+  p_div: "Compare l'imposition de vos dividendes entre le PFU (flat tax 31,4 %) et l'option au barème progressif avec abattement de 40 %.",
+  p_pvm: "Impose une plus-value de cession de valeurs mobilières : PFU 31,4 % ou barème, avec l'abattement pour départ à la retraite du dirigeant.",
+  p_niches: "Vérifie le plafonnement global des niches fiscales (10 000 €, 18 000 € avec outre-mer / Sofica) et l'excédent éventuellement perdu.",
+  i_dmto: "Calcule les frais de notaire d'une acquisition : émoluments, droits de mutation du département, contribution de sécurité immobilière et débours.",
+  i_ifi: "Estime l'impôt sur la fortune immobilière (IFI) selon le barème (seuil 1,3 M€) et la décote.",
+  i_pvimmo: "Calcule l'impôt sur la plus-value immobilière des particuliers : prix d'acquisition majoré (frais, travaux), abattements pour durée de détention et surtaxe.",
+  i_foncier: "Détermine le revenu foncier net imposable au régime réel et l'impôt correspondant (TMI + prélèvements sociaux).",
+  i_demembrement: "Calcule la valeur fiscale de l'usufruit et de la nue-propriété selon le barème de l'article 669 du CGI (âge de l'usufruitier).",
+  sim_immo: "Calcule le TRI d'un investissement locatif financé à crédit, selon le régime fiscal (revenus fonciers, déficit, Jeanbrun, Denormandie, Loc'Avantages, LMNP, LMP, SCI IS), revente comprise.",
+  sim_sci: "Compare l'investissement locatif en SCI à l'impôt sur le revenu (IR) et à l'impôt sur les sociétés (IS) : TRI, cash-flow et fiscalité à la revente.",
+  sim_achat: "Compare financièrement l'achat de sa résidence principale et la location avec placement de l'épargne, sur l'horizon de votre choix.",
+  sim_liberte: "Calcule le capital nécessaire pour vivre d'un revenu net souhaité, en tenant compte de la fiscalité des retraits (assurance-vie, PFU ou taux libre).",
+  sim_retraite: "Projette votre épargne-retraite par simulation Monte-Carlo : scénarios pessimiste, médian et optimiste selon le rendement et la volatilité.",
+  sim_capital: "Projette la valeur d'un capital dans le temps selon la classe d'actifs (rendement / volatilité) et vos versements.",
+  sim_saved: "Retrouvez et rouvrez vos simulations enregistrées.",
+  s_inclus: "Calcule les droits d'une donation lorsque le donateur prend les droits à sa charge (« droits inclus »), avec les abattements par bénéficiaire.",
+  s_simples: "Calcule les droits de mutation à titre gratuit (DMTG) d'une donation ou succession, selon le lien de parenté et les abattements.",
+  sim_dutreil: "Estime l'économie de droits d'un pacte Dutreil (art. 787 B) : exonération de 75 % de la valeur des titres d'entreprise transmis.",
+  sim_apport: "Simule un apport-cession (art. 150-0 B ter) : report d'imposition de la plus-value et obligation de réinvestissement.",
+  soc_is: "Calcule l'impôt sur les sociétés : taux réduit de 15 % jusqu'à 42 500 € de bénéfice, puis 25 %.",
+  fin_simple: "Calcule des intérêts simples à partir du capital, du taux et de la durée.",
+  fin_compose: "Calcule des intérêts composés et la valeur acquise d'un capital dans le temps.",
+  fin_equiv: "Convertit un taux d'une périodicité à une autre (annuel, mensuel…) — équivalence de taux.",
+  fin_emprunt: "Calcule la mensualité, le coût total et le tableau d'amortissement d'un emprunt.",
+};
 const Router = {
   stack: [],
   go(key, push = true) {
@@ -1826,6 +1859,10 @@ const Router = {
     const view = $('#view');
     view.innerHTML = '';
     view.append(fn());
+    if (SIM_INTROS[key]) {
+      const sh = view.querySelector('.sheet');
+      if (sh) sh.insertBefore(el('div', { class: 'sim-intro' }, [el('b', {}, 'À quoi ça sert ? '), SIM_INTROS[key]]), sh.firstChild);
+    }
     window.scrollTo(0, 0);
     // bottom nav highlight
     $$('.bottomnav button').forEach(b => b.classList.toggle('active', b.dataset.nav === key));
