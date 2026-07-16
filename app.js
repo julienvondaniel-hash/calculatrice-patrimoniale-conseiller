@@ -1461,11 +1461,8 @@ const Screens = {
     const v = el('div', {});
     v.append(hero('CALCULATRICE', 'Retraite & liberté financière'));
     const sheet = el('div', { class: 'sheet' });
-    sheet.append(el('div', { class: 'group-label' }, 'Simulateurs'));
     [['Liberté financière', 'sim_liberte'], ['Épargne-retraite (Monte Carlo)', 'sim_retraite'], ['Capital par classe d\'actifs', 'sim_capital']]
       .forEach(([t, key]) => simMenuItem(sheet, t, key));
-    sheet.append(el('div', { class: 'group-label' }, 'Mes dossiers'));
-    simMenuItem(sheet, '★ Mes simulations enregistrées', 'sim_saved');
     v.append(sheet); return v;
   },
   succ() {
@@ -1757,6 +1754,10 @@ const Screens = {
     sheet.append(c);
     sheet.append(el('div', { class: 'menu-item', style: 'margin-top:4px', onclick: () => Router.go('profil') }, [
       el('div', {}, [el('div', { class: 'mt', style: 'font-size:19px' }, 'Mon profil & logo'), el('div', { class: 'hint', style: 'margin:6px 0 0' }, 'Coordonnées et logo repris sur les exports PDF / Excel')]),
+      el('div', { class: 'ma' })
+    ]));
+    sheet.append(el('div', { class: 'menu-item', onclick: () => Router.go('sim_saved') }, [
+      el('div', {}, [el('div', { class: 'mt', style: 'font-size:19px' }, '★ Mes simulations enregistrées'), el('div', { class: 'hint', style: 'margin:6px 0 0' }, 'Vos dossiers sauvegardés, tous simulateurs confondus')]),
       el('div', { class: 'ma' })
     ]));
     sheet.append(el('button', { class: 'btn-ghost', style: 'margin-top:14px', onclick: () => Auth.signOut() }, 'Se déconnecter'));
