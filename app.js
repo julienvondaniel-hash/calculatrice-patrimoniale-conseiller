@@ -169,7 +169,7 @@ const Auth = {
 };
 
 const Billing = {
-  days() { return (cfg.TRIAL_DAYS || 30); },
+  days() { return (cfg.TRIAL_DAYS || 7); },
   compute(p) {
     const now = Date.now();
     if (p.subscription_status === 'active' && p.current_period_end && new Date(p.current_period_end).getTime() > now)
@@ -203,7 +203,20 @@ const Billing = {
     else if (!(SUPA_ON && supa)) { const k = (u && u.email) || 'demo'; localStorage.setItem('mkp_sub_' + k, 'active'); localStorage.setItem('mkp_plan_' + k, plan); toast('Abonnement activé (démo)'); this.refresh(); }
     else { toast('Lien de paiement non configuré (config.js).'); }
   },
-  async refresh() { const b = await this.gate(State.user); State.billing = b; const nav = document.querySelector('.bottomnav'); if (b.allowed) { if (nav) nav.style.display = ''; State.locked = false; Router.reset('home'); } else { if (nav) nav.style.display = 'none'; Router.reset('paywall'); } }
+  async refresh() { const b = await this.gate(State.user); State.billing = b; const nav = document.querySelector('.bottomnav'); if (b.allowed) { if (nav) nav.style.display = ''; State.locked = false; Router.reset('home'); } else { if (nav) nav.style.display = 'none'; Router.reset('paywall'); } },
+  // Ouvre le portail client Stripe (gérer moyen de paiement, factures, résiliation à tout moment — effet fin de période)
+  async portal() {
+    if (!(SUPA_ON && supa)) { toast('Disponible avec un compte serveur.'); return; }
+    try {
+      const { data } = await supa.auth.getSession();
+      const token = data && data.session && data.session.access_token;
+      if (!token) { toast('Reconnecte-toi pour gérer ton abonnement.'); return; }
+      const r = await fetch('/api/portal', { method: 'POST', headers: { Authorization: 'Bearer ' + token } });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j.url) location.href = j.url;
+      else toast(j.error || 'Aucun abonnement à gérer.');
+    } catch (e) { toast('Erreur, réessaie dans un instant.'); }
+  }
 };
 
 function loadScript(src) {
@@ -1143,7 +1156,7 @@ const Screens = {
     if (State.billing && State.billing.state === 'trial') {
       const days = State.billing.daysLeft;
       const banner = el('div', { class: 'card', style: 'background:var(--navy);display:flex;align-items:center;justify-content:space-between;gap:12px' }, [
-        el('div', {}, [el('div', { style: 'color:#fff;font-weight:700;font-size:16px' }, 'Essai gratuit'), el('div', { style: 'color:#AAB0CE;font-size:13px;margin-top:3px' }, days + ' jour' + (days > 1 ? 's' : '') + ' restant' + (days > 1 ? 's' : ''))]),
+        el('div', {}, [el('div', { style: 'color:#fff;font-weight:700;font-size:16px' }, 'Essai gratuit — 7 jours'), el('div', { style: 'color:#AAB0CE;font-size:13px;margin-top:3px' }, days + ' jour' + (days > 1 ? 's' : '') + ' restant' + (days > 1 ? 's' : '') + ' · sans engagement')]),
         el('button', { class: 'btn-back', style: 'background:#12B981;color:#0b3b2e', onclick: () => Router.go('paywall') }, 'S\'abonner')
       ]);
       sheet.append(banner);
@@ -1752,6 +1765,22 @@ const Screens = {
       el('div', { class: 'row' }, [el('span', { class: 'k' }, 'Mode'), el('span', { class: 'v', style:'font-size:15px' }, SUPA_ON && supa ? 'Serveur sécurisé' : 'Démo local')]),
     ]));
     sheet.append(c);
+
+    // Abonnement
+    const b = State.billing || {};
+    const statut = b.state === 'active' ? 'Actif' : b.state === 'trial' ? 'Essai (' + (b.daysLeft || 0) + ' j restants)' : 'Aucun abonnement actif';
+    const abo = el('div', { class: 'card' });
+    const rows = [el('div', { class: 'row' }, [el('span', { class: 'k' }, 'Abonnement'), el('span', { class: 'v' }, statut)])];
+    if (b.state === 'active' && b.plan) rows.push(el('div', { class: 'row' }, [el('span', { class: 'k' }, 'Offre'), el('span', { class: 'v', style: 'font-size:15px' }, b.plan === 'immo' ? 'Immobilier' : 'Intégrale')]));
+    if (b.state === 'active' && b.periodEnd) rows.push(el('div', { class: 'row' }, [el('span', { class: 'k' }, 'Échéance'), el('span', { class: 'v', style: 'font-size:15px' }, new Date(b.periodEnd).toLocaleDateString('fr-FR'))]));
+    abo.append(el('div', { class: 'result', style: 'margin:0' }, rows));
+    sheet.append(abo);
+    if (SUPA_ON && supa && b.state === 'active') {
+      sheet.append(el('button', { class: 'btn-ghost', style: 'margin-top:4px', onclick: () => Billing.portal() }, 'Gérer / résilier mon abonnement'));
+    } else if (b.state !== 'active') {
+      sheet.append(el('button', { class: 'btn-primary', style: 'margin-top:4px;background:#12B981;color:#08362a', onclick: () => Router.go('paywall') }, 'S\'abonner'));
+    }
+    sheet.append(el('div', { class: 'hint', style: 'margin:8px 4px 4px' }, 'Sans engagement. Résiliable à tout moment et sans préavis : la résiliation prend effet à la fin de la période en cours. Tout mois commencé reste dû en intégralité (aucun remboursement au prorata).'));
     sheet.append(el('div', { class: 'menu-item', style: 'margin-top:4px', onclick: () => Router.go('profil') }, [
       el('div', {}, [el('div', { class: 'mt', style: 'font-size:19px' }, 'Mon profil & logo'), el('div', { class: 'hint', style: 'margin:6px 0 0' }, 'Coordonnées et logo repris sur les exports PDF / Excel')]),
       el('div', { class: 'ma' })
@@ -1778,7 +1807,7 @@ const Screens = {
     const v = el('div', {});
     v.append(hero('MON KAP PRO', 'Choisissez votre offre'));
     const sheet = el('div', { class: 'sheet' });
-    sheet.append(el('div', { class: 'hint', style: 'margin:-4px 2px 14px;font-size:14px' }, 'Votre essai gratuit est terminé. Choisissez une formule pour continuer (sans engagement, résiliable à tout moment).'));
+    sheet.append(el('div', { class: 'hint', style: 'margin:-4px 2px 14px;font-size:14px' }, 'Votre essai gratuit de 7 jours est terminé. Choisissez une formule pour continuer. Sans engagement, résiliable à tout moment et sans préavis.'));
     const feat = (t) => el('div', { style: 'display:flex;gap:8px;align-items:flex-start;margin-top:7px' }, [el('span', { style: 'color:#12B981;font-weight:800' }, '✓'), el('span', { style: 'font-size:13px;color:#3A4063;line-height:1.4' }, t)]);
     const card = (badge, price, feats, plan, hl) => {
       const c = el('div', { class: 'card', style: 'border:2px solid ' + (hl ? '#12B981' : 'var(--line)') });
@@ -1791,7 +1820,7 @@ const Screens = {
       return c;
     };
     sheet.append(card('Immobilier', (cfg.PRICE_IMMO || '4,99 € TTC/mois'),
-      ['Toutes les calculatrices fiscales', 'SCI à l\'IS vs SCI à l\'IR', 'Immobilier locatif — TRI (7 régimes)', 'Acheter vs Louer'], 'immo', false));
+      ['Toutes les calculatrices fiscales', 'SCI à l\'IS vs SCI à l\'IR', 'Immobilier locatif — TRI (10 régimes)', 'Acheter vs Louer'], 'immo', false));
     sheet.append(card('Intégrale', (cfg.PRICE_ALL || '9,99 € TTC/mois'),
       ['Tout l\'offre Immobilier, plus :', 'Épargne-retraite (Monte Carlo)', 'Capital par classe d\'actifs', 'Pacte Dutreil & Apport-cession 150-0 B ter'], 'all', true));
     sheet.append(el('button', { class: 'btn-ghost', style: 'margin-top:6px', onclick: () => Billing.refresh() }, 'J\'ai déjà payé — actualiser'));
