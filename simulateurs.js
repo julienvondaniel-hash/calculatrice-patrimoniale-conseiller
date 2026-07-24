@@ -628,6 +628,10 @@
       aTBsel.addEventListener('change', aSyncDmto); aSyncDmto();
       sheet.append(field('Apport personnel', moneyInput('a-apport', '60000')));
       sheet.append(field('Taux du crédit', pctInput('a-taux', '3')));
+      sheet.append(field('Assurance emprunteur (ADI)', pctInput('a-adi', '0,34')));
+      const aAdiMode = el('div', { class: 'card' }, [el('label', { class: 'field-label' }, 'Base de l\'assurance emprunteur')]);
+      aAdiMode.append(selectField('a-adimode', [['initial', 'Capital initial (prime constante)'], ['crd', 'Capital restant dû (prime dégressive)']], 'initial'));
+      sheet.append(aAdiMode);
       sheet.append(field('Durée du crédit', stepper('a-duree', 20, 1, 40)));
       sheet.append(field('Charges de propriété / an (% du bien)', pctInput('a-charges', '1,5')));
       sheet.append(field('Revalorisation du bien / an', pctInput('a-reval', '2')));
@@ -640,20 +644,22 @@
         const P = gv('a-prix'), apport = gv('a-apport'), taux = gv('a-taux') / 100;
         const duree = Math.max(1, Math.round(gv('a-duree'))), chargesPct = gv('a-charges') / 100, reval = gv('a-reval') / 100;
         const loyerPct = gv('a-loyer') / 100, irl = gv('a-irl') / 100, rdtP = gv('a-place') / 100, flat = gv('a-flat') / 100, horizon = Math.max(1, Math.round(gv('a-hor')));
+        const adi = gv('a-adi') / 100, adiMode = gvSel('a-adimode');
         const F = computeFraisNotaire(P, gvSel('a-tb'), dmtoDeptRate(gvSel('a-dep')) * 100, gv('a-deb')), loan = Math.max(0, P + F - apport), creditM = duree * 12, rM = taux / 12;
         const pmtM = rM === 0 ? loan / creditM : loan * rM / (1 - Math.pow(1 + rM, -creditM)), rPM = rdtP / 12;
         let bal = loan, renter = apport, renterC = apport; const bW = [P - loan], rW = [apport]; let cross = null;
         const detail = []; let payY = 0, chY = 0, rentY = 0;
         for (let m = 1; m <= horizon * 12; m++) {
           const y = Math.ceil(m / 12), loanPay = m <= creditM ? pmtM : 0;
+          const insM = (m <= creditM) ? (adiMode === 'crd' ? bal : loan) * adi / 12 : 0;   // ADI sur capital restant dû (début de mois) ou capital initial
           if (m <= creditM) bal -= (pmtM - bal * rM);
           const chargesM = P * chargesPct * Math.pow(1.015, y - 1) / 12; // charges indexées ~inflation 1,5%/an
           const rentM = P * loyerPct * Math.pow(1 + irl, y - 1) / 12;
-          payY += loanPay; chY += chargesM; rentY += rentM;
-          const diff = (loanPay + chargesM) - rentM;
+          payY += loanPay + insM; chY += chargesM; rentY += rentM;
+          const diff = (loanPay + insM + chargesM) - rentM;
           renter = renter * (1 + rPM) + diff; renterC += diff;
           if (m % 12 === 0) {
-            const pv = P * Math.pow(1 + reval, y); const rn = renter - Math.max(renter - renterC, 0) * flat; const bn = pv - Math.max(bal, 0);
+            const pv = P * Math.pow(1 + reval, y - 1); const rn = renter - Math.max(renter - renterC, 0) * flat; const bn = pv - Math.max(bal, 0);
             bW.push(bn); rW.push(rn); if (cross === null && bn >= rn) cross = y;
             detail.push([y, pv, Math.max(bal, 0), bn, payY, chY, rentY, renter, rn, bn - rn]);
             payY = 0; chY = 0; rentY = 0;
@@ -667,7 +673,7 @@
             rows: detail.map(d => [String(d[0]), eN(d[1]), neg(d[2]), eN(d[3]), eN(d[7]), eN(d[8]), sgn(d[9])]),
             xl: { data: detail.map(d => [d[0], d[1], d[2], d[3], d[7], d[8], d[9]]), fcol: { 3: '=RC[-2]-RC[-1]', 6: '=RC[-3]-RC[-1]' } } },
           { kind: 'cash', title: 'Cash-flow annuel — décaissements (acheteur) et placement (locataire)',
-            head: ['An', 'Mensualités (−)', 'Charges (−)', 'Loyer locataire (−)', 'Différence placée'],
+            head: ['An', 'Mensualités + ADI (−)', 'Charges (−)', 'Loyer locataire (−)', 'Différence placée'],
             rows: detail.map(d => [String(d[0]), neg(d[4]), neg(d[5]), neg(d[6]), sgn(d[4] + d[5] - d[6])]),
             xl: { data: detail.map(d => [d[0], d[4], d[5], d[6], d[4] + d[5] - d[6]]), fcol: { 4: '=RC[-3]+RC[-2]-RC[-1]' } } }
         ];
@@ -684,7 +690,7 @@
             ['Écart (acheteur − locataire)', (ecart >= 0 ? '+' : '') + e0(ecart)],
             ['Année de bascule', cross === null ? 'jamais' : cross + ' ans'],
           ],
-          note: 'Cadrage classique : l\'acheteur capitalise le bien (− CRD), le locataire place l\'apport et l\'écart de budget (net de flat tax). Indicatif.'
+          note: 'Cadrage classique : l\'acheteur capitalise le bien (− CRD) et supporte mensualités + assurance emprunteur (ADI, sur capital initial ou restant dû) ; le locataire place l\'apport et l\'écart de budget (net de flat tax). La revalorisation du bien s\'applique à partir de l\'année 2. Indicatif.'
         });
       }));
       v.append(sheet); return v;
